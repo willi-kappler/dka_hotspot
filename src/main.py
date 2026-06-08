@@ -1,16 +1,25 @@
-from nicegui import ui
+from nicegui import ui, app
+from pages.login import login_page
+from pages import map_view, add_data
 
-#local imports
-from pages.mapPage import mapPage
-from pages.loginPage import loginPage
-import config
 
-@ui.page('/')
+def get_role() -> str | None:
+    return app.storage.user.get("role")
+
+
+@ui.page("/")
 def index():
-    loginPage()
+    if get_role():
+        ui.navigate.to("/map")
+    else:
+        login_page()
 
-@ui.page('/mapPage')
-def map():
-    mapPage()
 
-ui.run(storage_secret= config.Config.secret)
+@ui.page("/logout")
+def logout():
+    app.storage.user.clear()
+    ui.navigate.to("/")
+
+
+if __name__ in {"__main__", "__mp_main__"}:
+    ui.run(title="DKW Hotspot Map", port=8080, storage_secret="dkw-secret-key")
