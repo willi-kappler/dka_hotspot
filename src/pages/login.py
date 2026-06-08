@@ -4,7 +4,7 @@ from auth import authenticate
 
 def login_page():
     with ui.column().classes("w-full h-screen items-center justify-center gap-6"):
-        ui.label("DKW Hotspot Map").classes("text-4xl font-bold text-blue-700")
+        ui.label("DKA Hotspot Analysis Map").classes("text-4xl font-bold text-blue-700")
         ui.label("Please log in to continue").classes("text-gray-400")
 
         with ui.card().classes("w-80 p-6 gap-4"):
