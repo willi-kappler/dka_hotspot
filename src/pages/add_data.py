@@ -12,9 +12,16 @@ REQUIRED_COLUMNS = {
 }
 
 
-def append_rows(rows: list[dict]):
+def get_fieldnames() -> list[str]:
+    """Read column order from the actual CSV header."""
+    with open(DATA_FILE, newline="", encoding="utf-8") as f:
+        return next(csv.reader(f))
+
+
+def append_rows(rows):
+    fieldnames = get_fieldnames()
     with open(DATA_FILE, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(REQUIRED_COLUMNS))
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writerows(rows)
 
 
@@ -78,13 +85,13 @@ def add_data_page():
                                     "state": state.value,
                                     "month of onset": int(month.value),
                                     "year of onset": int(year.value),
-                                    "a1c": a1c.value or "",
+                                    "a1c": round(float(a1c.value), 1) if a1c.value else "",
                                     "glucose": int(gluc.value),
-                                    "bikarb": bik.value,
-                                    "ph": ph.value,
+                                    "bikarb": round(float(bik.value), 1),
+                                    "ph": round(float(ph.value), 2),
                                     "duration of symptoms": int(dur.value) if dur.value else "",
-                                    "lat": lat.value,
-                                    "lon": lon.value,
+                                    "lat": round(float(lat.value), 4),
+                                    "lon": round(float(lon.value), 4),
                                 }])
                                 notice.set_text("Record saved successfully.")
                                 notice.classes("text-green-600", remove="text-red-500")
