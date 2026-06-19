@@ -1,13 +1,7 @@
-import csv
-from pathlib import Path
 from nicegui import ui, app
-
-DATA_FILE = Path(__file__).parent.parent / "data" / "dka_sample_data.csv"
-
-
-def load_patients() -> list[dict]:
-    with open(DATA_FILE, newline="", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
+from services.map_markers import MAP_CENTER, create_patient_marker
+from services.patient_filters import default_filters, patient_matches, year_range
+from storage.patients_csv import load_patient_rows
 
 
 @ui.page("/map")
@@ -17,70 +11,23 @@ def map_page():
         return
 
     role = app.storage.user["role"]
-    patients = load_patients()
-    all_years: list[int] = sorted({int(p["year of onset"]) for p in patients})
-
-    filters = {
-        "age_min": 1,
-        "age_max": 48,
-        "year_min": min(all_years),
-        "year_max": max(all_years),
-        "sex": {"Male", "Female"},
-        "glucose_min": 150.0,
-        "glucose_max": 789.0,
-        "ph_min": 6.65,
-        "ph_max": 7.35,
-        "bikarb_min": 1.5,
-        "bikarb_max": 22.0,
-    }
+    patients = load_patient_rows()
+    filters = default_filters(patients)
 
     active_markers: list = []
-
-    def patient_matches(p: dict) -> bool:
-        try:
-            age = int(p["age at onset"])
-            year = int(p["year of onset"])
-            glucose = float(p["glucose"])
-            ph = float(p["ph"])
-            bikarb = float(p["bikarb"])
-            sex = p["sex"]
-        except (ValueError, KeyError):
-            return False
-        return (
-            filters["age_min"] <= age <= filters["age_max"]
-            and filters["year_min"] <= year <= filters["year_max"]
-            and sex in filters["sex"]
-            and filters["glucose_min"] <= glucose <= filters["glucose_max"]
-            and filters["ph_min"] <= ph <= filters["ph_max"]
-            and filters["bikarb_min"] <= bikarb <= filters["bikarb_max"]
-        )
 
     def refresh_markers(m, count_label):
         for marker in active_markers:
             marker.run_method("remove")
         active_markers.clear()
 
-        matched = [p for p in patients if patient_matches(p)]
+        matched = [p for p in patients if patient_matches(p, filters)]
         count_label.set_text(f"{len(matched)} cases shown")
 
         for p in matched:
-            try:
-                lat = float(p["lat"])
-                lon = float(p["lon"])
-            except (ValueError, KeyError):
-                continue
-
-            marker = m.marker(latlng=(lat, lon))
-            popup_html = (
-                f"<b>Age:</b> {p['age at onset']}<br>"
-                f"<b>Sex:</b> {p['sex']}<br>"
-                f"<b>Year:</b> {p['year of onset']}<br>"
-                f"<b>Glucose:</b> {p['glucose']} mg/dL<br>"
-                f"<b>pH:</b> {p['ph']}<br>"
-                f"<b>Bicarbonate:</b> {p['bikarb']}"
-            )
-            marker.run_method("bindPopup", popup_html)
-            active_markers.append(marker)
+            marker = create_patient_marker(m, p)
+            if marker:
+                active_markers.append(marker)
 
     # ── Layout ────────────────────────────────────────────────────────────
     with ui.row().classes("w-full h-screen gap-0 overflow-hidden"):
@@ -93,6 +40,14 @@ def map_page():
                     .props("flat round").tooltip("Log out")
 
             count_label = ui.label(f"{len(patients)} cases shown").classes("text-sm text-gray-500")
+
+            with ui.row().classes("w-full items-center gap-4 text-xs text-gray-600"):
+                with ui.row().classes("items-center gap-1"):
+                    ui.icon("location_on", color="blue").classes("text-base")
+                    ui.label("Male")
+                with ui.row().classes("items-center gap-1"):
+                    ui.icon("location_on", color="pink").classes("text-base")
+                    ui.label("Female")
 
             def on_change():
                 refresh_markers(map_widget, count_label)
@@ -129,7 +84,7 @@ def map_page():
             # ── Year ──
             @ui.refreshable
             def year_filter_ui():
-                y_min, y_max = min(all_years), max(all_years)
+                y_min, y_max = year_range(patients)
                 with ui.card().classes("w-full p-3 gap-1"):
                     with ui.row().classes("w-full justify-between items-center"):
                         ui.label("Year of onset").classes("font-semibold text-sm")
@@ -202,7 +157,7 @@ def map_page():
 
             # ── Reset ──
             def reset_filters():
-                y_min, y_max = min(all_years), max(all_years)
+                y_min, y_max = year_range(patients)
                 age_min_input.set_value(1)
                 age_max_input.set_value(48)
                 for cb in sex_checks.values():
@@ -231,12 +186,12 @@ def map_page():
         # ── Map ───────────────────────────────────────────────────────────
         with ui.column().classes("flex-1 h-full gap-0"):
             with ui.row().classes("w-full items-center bg-blue-700 px-6 py-3"):
-                ui.label("My Diabetes Map").classes("text-white text-2xl font-bold")
+                ui.label("Diabete Ketoacidosis Analyses").classes("text-white text-2xl font-bold")
                 ui.space()
                 if role == "scientist":
                     ui.button("Add Data", icon="add_circle",
                               on_click=lambda: ui.navigate.to("/add_data")) \
                         .props("flat color=white")
 
-            map_widget = ui.leaflet(center=(48.5, 9.0), zoom=8).classes("w-full flex-1")
-            refresh_markers(map_widget, count_label)
+            map_widget = ui.leaflet(center=MAP_CENTER, zoom=8).classes("w-full flex-1")
+            map_widget.on("init", lambda _: refresh_markers(map_widget, count_label))

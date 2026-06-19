@@ -1,28 +1,18 @@
 import csv
 import io
-from pathlib import Path
 from nicegui import ui, app, events
 
-DATA_FILE = Path(__file__).parent.parent / "data" / "dka_sample_data.csv"
-
-REQUIRED_COLUMNS = {
-    "age at onset", "sex", "zipcode", "state",
-    "month of onset", "year of onset", "a1c",
-    "glucose", "bikarb", "ph", "duration of symptoms", "lat", "lon",
-}
-
-
-def get_fieldnames() -> list[str]:
-    """Read column order from the actual CSV header."""
-    with open(DATA_FILE, newline="", encoding="utf-8") as f:
-        return next(csv.reader(f))
+from services.geocoding import geocode_patient_row
+from storage.patients_csv import (
+    REQUIRED_COLUMNS,
+    append_patient_rows,
+    count_rows_by_zipcode,
+    normalize_header,
+)
 
 
-def append_rows(rows):
-    fieldnames = get_fieldnames()
-    with open(DATA_FILE, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        writer.writerows(rows)
+def zipcode_key(row: dict) -> tuple[str, str]:
+    return row.get("zipcode", "").strip(), row.get("state", "").strip()
 
 
 @ui.page("/add_data")
@@ -62,8 +52,6 @@ def add_data_page():
                                 a1c    = ui.number("HbA1c (%)", min=0, max=20, step=0.1, format="%.1f").classes("w-full")
                                 ph     = ui.number("pH", min=6.0, max=8.0, step=0.01, format="%.2f").classes("w-full")
                                 bik    = ui.number("Bicarbonate (mmol/L)", min=0, max=40, step=0.1, format="%.1f").classes("w-full")
-                                lat    = ui.number("Latitude", step=0.0001, format="%.4f").classes("w-full")
-                                lon    = ui.number("Longitude", step=0.0001, format="%.4f").classes("w-full")
 
                             with ui.row().classes("w-full gap-3"):
                                 sex    = ui.select(["Male", "Female"], label="Sex").classes("flex-1")
@@ -73,33 +61,38 @@ def add_data_page():
                             notice = ui.label("").classes("text-sm")
 
                             def save_single():
-                                required = [age, year, month, gluc, ph, bik, lat, lon, sex, zipcode, state]
+                                required = [age, year, month, gluc, ph, bik, sex, zipcode, state]
                                 if any(f.value is None or f.value == "" for f in required):
                                     notice.set_text("Please fill in all fields.")
                                     notice.classes("text-red-500", remove="text-green-600")
                                     return
-                                append_rows([{
-                                    "age at onset": int(age.value),
-                                    "sex": sex.value,
-                                    "zipcode": zipcode.value,
-                                    "state": state.value,
-                                    "month of onset": int(month.value),
-                                    "year of onset": int(year.value),
-                                    "a1c": round(float(a1c.value), 1) if a1c.value else "",
-                                    "glucose": int(gluc.value),
-                                    "bikarb": round(float(bik.value), 1),
-                                    "ph": round(float(ph.value), 2),
-                                    "duration of symptoms": int(dur.value) if dur.value else "",
-                                    "lat": round(float(lat.value), 4),
-                                    "lon": round(float(lon.value), 4),
-                                }])
-                                notice.set_text("Record saved successfully.")
-                                notice.classes("text-green-600", remove="text-red-500")
-                                for field in [age, year, month, dur, gluc, a1c, ph, bik, lat, lon]:
-                                    field.set_value(None)
-                                sex.set_value(None)
-                                zipcode.set_value("")
-                                state.set_value("")
+                                try:
+                                    row_data = {
+                                        "age at onset": int(age.value),
+                                        "sex": sex.value,
+                                        "zipcode": zipcode.value,
+                                        "state": state.value,
+                                        "month of onset": int(month.value),
+                                        "year of onset": int(year.value),
+                                        "a1c": round(float(a1c.value), 1) if a1c.value else "",
+                                        "glucose": int(gluc.value),
+                                        "bikarb": round(float(bik.value), 1),
+                                        "ph": round(float(ph.value), 2),
+                                        "duration of symptoms": int(dur.value) if dur.value else "",
+                                    }
+                                    duplicate_index = count_rows_by_zipcode().get(zipcode_key(row_data), 0)
+                                    row = geocode_patient_row(row_data, duplicate_index)
+                                    append_patient_rows([row])
+                                    notice.set_text("Record saved successfully.")
+                                    notice.classes("text-green-600", remove="text-red-500")
+                                    for field in [age, year, month, dur, gluc, a1c, ph, bik]:
+                                        field.set_value(None)
+                                    sex.set_value(None)
+                                    zipcode.set_value("")
+                                    state.set_value("")
+                                except Exception as ex:
+                                    notice.set_text(f"Could not get coordinates: {ex}")
+                                    notice.classes("text-red-500", remove="text-green-600")
 
                             ui.button("Save record", icon="save", on_click=save_single) \
                                 .classes("bg-green-600 text-white")
@@ -119,13 +112,25 @@ def add_data_page():
                                 try:
                                     content = e.content.read().decode("utf-8")
                                     reader = csv.DictReader(io.StringIO(content))
+                                    reader.fieldnames = [
+                                        normalize_header(name)
+                                        for name in (reader.fieldnames or [])
+                                    ]
                                     rows = list(reader)
                                     missing = REQUIRED_COLUMNS - set(reader.fieldnames or [])
                                     if missing:
                                         csv_notice.set_text(f"Missing columns: {', '.join(sorted(missing))}")
                                         csv_notice.classes("text-red-500", remove="text-green-600")
                                         return
-                                    append_rows(rows)
+                                    zipcode_counts = count_rows_by_zipcode()
+                                    geocoded_rows = []
+                                    for row in rows:
+                                        key = zipcode_key(row)
+                                        duplicate_index = zipcode_counts.get(key, 0)
+                                        geocoded_rows.append(geocode_patient_row(row, duplicate_index))
+                                        zipcode_counts[key] = duplicate_index + 1
+                                    rows = geocoded_rows
+                                    append_patient_rows(rows)
                                     csv_notice.set_text(f"{len(rows)} records imported successfully.")
                                     csv_notice.classes("text-green-600", remove="text-red-500")
                                 except Exception as ex:
