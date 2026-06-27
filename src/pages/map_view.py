@@ -48,6 +48,7 @@ def map_page():
                 with ui.row().classes("items-center gap-1"):
                     ui.icon("location_on", color="pink").classes("text-base")
                     ui.label("Female")
+            ui.label("Within each color, lower pH is darker and higher pH is lighter").classes("text-xs text-gray-500")
 
             def on_change():
                 refresh_markers(map_widget, count_label)
@@ -193,5 +194,5 @@ def map_page():
                               on_click=lambda: ui.navigate.to("/add_data")) \
                         .props("flat color=white")
 
-            map_widget = ui.leaflet(center=MAP_CENTER, zoom=8).classes("w-full flex-1")
+            map_widget = ui.leaflet(center=MAP_CENTER, zoom=9).classes("w-full flex-1")
             map_widget.on("init", lambda _: refresh_markers(map_widget, count_label))

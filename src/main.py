@@ -22,4 +22,4 @@ def logout():
 
 
 if __name__ in {"__main__", "__mp_main__"}:
-    ui.run(title="DKA Hotspot Analysis Map", port=8080, storage_secret="dkw-secret-key")
+    ui.run(title="DKA Hotspot Analysis Map", port=8080, storage_secret="dkw-secret-key") #will change 
