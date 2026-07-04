@@ -1,6 +1,7 @@
 import csv
 import io
-from nicegui import ui, app, events
+
+from nicegui import app, events, ui
 
 from services.geocoding import geocode_patient_row
 from storage.patients_csv import (
@@ -21,49 +22,61 @@ def add_data_page():
         ui.navigate.to("/")
         return
 
-    with ui.column().classes("w-full h-screen gap-0"):
+    def field_number(label: str, **props):
+        return ui.number(label, **props).props("outlined dense").classes("w-full")
 
-        # ── Header ────────────────────────────────────────────────────────
-        with ui.row().classes("w-full items-center bg-green-700 px-6 py-3 gap-4"):
+    def field_input(label: str, **props):
+        return ui.input(label, **props).props("outlined dense").classes("w-full")
+
+    def section(title: str):
+        with ui.column().classes("w-full gap-3 border-b border-gray-100 pb-5"):
+            ui.label(title).classes("text-xs font-semibold uppercase text-gray-500")
+            return ui.grid(columns=2).classes("w-full gap-3")
+
+    with ui.column().classes("w-full min-h-screen gap-0 bg-gray-50"):
+        with ui.row().classes("h-14 w-full items-center border-b border-gray-200 bg-white px-6 gap-4"):
             ui.button(icon="arrow_back", on_click=lambda: ui.navigate.to("/map")) \
-                .props("flat round color=white").tooltip("Back to map")
-            ui.label("Add Data").classes("text-white text-2xl font-bold")
+                .props("flat round").tooltip("Back to map")
+            with ui.column().classes("gap-0"):
+                ui.label("Add Data").classes("text-lg font-semibold text-gray-900")
+                ui.label("Create one case or import a CSV file.").classes("text-xs text-gray-500")
 
-        # ── Tabs ──────────────────────────────────────────────────────────
-        with ui.column().classes("flex-1 overflow-y-auto p-6 gap-6 items-center"):
-            with ui.card().classes("w-full max-w-2xl p-0"):
-                with ui.tabs().classes("w-full") as tabs:
+        with ui.column().classes("w-full max-w-4xl mx-auto p-6 gap-6"):
+            with ui.card().classes("w-full p-0 gap-0"):
+                with ui.tabs().classes("w-full border-b border-gray-200") as tabs:
                     tab_single = ui.tab("Single record", icon="person_add")
-                    tab_csv    = ui.tab("Upload CSV", icon="upload_file")
+                    tab_csv = ui.tab("Upload CSV", icon="upload_file")
 
                 with ui.tab_panels(tabs, value=tab_single).classes("w-full"):
-
-                    # ── Single record ─────────────────────────────────────
                     with ui.tab_panel(tab_single):
-                        with ui.column().classes("w-full p-4 gap-3"):
-                            ui.label("New patient record").classes("text-lg font-semibold")
-
-                            with ui.grid(columns=2).classes("w-full gap-3"):
-                                age    = ui.number("Age at onset", min=0, max=120, step=1, format="%.0f").classes("w-full")
-                                year   = ui.number("Year of onset", min=1900, max=2100, step=1, format="%.0f").classes("w-full")
-                                month  = ui.number("Month of onset", min=1, max=12, step=1, format="%.0f").classes("w-full")
-                                dur    = ui.number("Duration of symptoms (days)", min=0, step=1, format="%.0f").classes("w-full")
-                                gluc   = ui.number("Blood glucose (mg/dL)", min=0, step=1, format="%.0f").classes("w-full")
-                                a1c    = ui.number("HbA1c (%)", min=0, max=20, step=0.1, format="%.1f").classes("w-full")
-                                ph     = ui.number("pH", min=6.0, max=8.0, step=0.01, format="%.2f").classes("w-full")
-                                bik    = ui.number("Bicarbonate (mmol/L)", min=0, max=40, step=0.1, format="%.1f").classes("w-full")
-
-                            with ui.row().classes("w-full gap-3"):
-                                sex    = ui.select(["Male", "Female"], label="Sex").classes("flex-1")
-                                zipcode = ui.input("ZIP code").classes("flex-1")
-                                state   = ui.input("State").classes("flex-1")
-
+                        with ui.column().classes("w-full gap-5 p-5"):
                             notice = ui.label("").classes("text-sm")
+                            ui.label("* Required fields. Optional fields can be left blank.") \
+                                .classes("text-xs text-gray-500")
+
+                            with section("Patient"):
+                                age = field_number("Age at onset *", min=0, max=120, step=1, format="%.0f")
+                                sex = ui.select(["Male", "Female"], label="Sex *").props("outlined dense").classes("w-full")
+
+                            with section("Onset"):
+                                year = field_number("Year of onset *", min=1900, max=2100, step=1, format="%.0f")
+                                month = field_number("Month of onset *", min=1, max=12, step=1, format="%.0f")
+                                dur = field_number("Duration of symptoms (days, optional)", min=0, step=1, format="%.0f")
+
+                            with section("Lab values"):
+                                gluc = field_number("Glucose (mg/dL) *", min=0, step=1, format="%.0f")
+                                a1c = field_number("HbA1c (%, optional)", min=0, max=20, step=0.1, format="%.1f")
+                                ph = field_number("pH *", min=6.0, max=8.0, step=0.01, format="%.2f")
+                                bik = field_number("Bicarbonate (mmol/L) *", min=0, max=40, step=0.1, format="%.1f")
+
+                            with section("Location"):
+                                zipcode = field_input("ZIP code *")
+                                state = field_input("State *")
 
                             def save_single():
                                 required = [age, year, month, gluc, ph, bik, sex, zipcode, state]
                                 if any(f.value is None or f.value == "" for f in required):
-                                    notice.set_text("Please fill in all fields.")
+                                    notice.set_text("Please fill in all required fields.")
                                     notice.classes("text-red-500", remove="text-green-600")
                                     return
                                 try:
@@ -94,19 +107,19 @@ def add_data_page():
                                     notice.set_text(f"Could not get coordinates: {ex}")
                                     notice.classes("text-red-500", remove="text-green-600")
 
-                            ui.button("Save record", icon="save", on_click=save_single) \
-                                .classes("bg-green-600 text-white")
+                            with ui.row().classes("w-full justify-end"):
+                                ui.button("Save record", icon="save", on_click=save_single) \
+                                    .classes("bg-blue-700 text-white")
 
-                    # ── CSV upload ────────────────────────────────────────
                     with ui.tab_panel(tab_csv):
-                        with ui.column().classes("w-full p-4 gap-4"):
-                            ui.label("Upload a CSV file").classes("text-lg font-semibold")
-                            ui.label(
-                                "The file must have these columns: " +
-                                ", ".join(sorted(REQUIRED_COLUMNS))
-                            ).classes("text-xs text-gray-500")
-
+                        with ui.column().classes("w-full gap-5 p-5"):
                             csv_notice = ui.label("").classes("text-sm")
+
+                            with ui.column().classes("w-full gap-2 rounded-md bg-gray-50 p-4"):
+                                ui.label("CSV import").classes("text-sm font-semibold text-gray-900")
+                                ui.label(
+                                    "Required columns: " + ", ".join(sorted(REQUIRED_COLUMNS))
+                                ).classes("text-xs text-gray-500")
 
                             def handle_upload(e: events.UploadEventArguments):
                                 try:
@@ -129,9 +142,8 @@ def add_data_page():
                                         duplicate_index = zipcode_counts.get(key, 0)
                                         geocoded_rows.append(geocode_patient_row(row, duplicate_index))
                                         zipcode_counts[key] = duplicate_index + 1
-                                    rows = geocoded_rows
-                                    append_patient_rows(rows)
-                                    csv_notice.set_text(f"{len(rows)} records imported successfully.")
+                                    append_patient_rows(geocoded_rows)
+                                    csv_notice.set_text(f"{len(geocoded_rows)} records imported successfully.")
                                     csv_notice.classes("text-green-600", remove="text-red-500")
                                 except Exception as ex:
                                     csv_notice.set_text(f"Error reading file: {ex}")
@@ -141,5 +153,3 @@ def add_data_page():
                                 label="Choose CSV file",
                                 on_upload=handle_upload,
                             ).props("accept=.csv").classes("w-full")
-
-                            csv_notice

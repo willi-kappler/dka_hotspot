@@ -2,7 +2,7 @@ import json
 
 MALE_MARKER_COLOR = "#2563eb"
 FEMALE_MARKER_COLOR = "#ec4899"
-MAP_CENTER = (48.6536, 8.7020)
+MAP_CENTER = (48.6536, 8.7020) #extrapolate as a function of the patients' coordinates
 PH_MIN = 6.65
 PH_MAX = 7.35
 MALE_PH_COLOR_STOPS = (
@@ -55,13 +55,19 @@ def ph_gradient_color(ph: float, color_stops: tuple[tuple[float, str], ...]) -> 
     return color_stops[-1][1]
 
 
+# def marker_color(patient: dict) -> str:
+#     color_stops = MALE_PH_COLOR_STOPS if patient.get("sex") == "Male" else FEMALE_PH_COLOR_STOPS
+#     try:
+#         ph = float(patient["ph"])
+#     except (ValueError, KeyError):
+#         return MALE_MARKER_COLOR if patient.get("sex") == "Male" else FEMALE_MARKER_COLOR
+#     return ph_gradient_color(ph, color_stops)
+
+
+
+# fixed color stops
 def marker_color(patient: dict) -> str:
-    color_stops = MALE_PH_COLOR_STOPS if patient.get("sex") == "Male" else FEMALE_PH_COLOR_STOPS
-    try:
-        ph = float(patient["ph"])
-    except (ValueError, KeyError):
-        return MALE_MARKER_COLOR if patient.get("sex") == "Male" else FEMALE_MARKER_COLOR
-    return ph_gradient_color(ph, color_stops)
+     return MALE_MARKER_COLOR if patient.get("sex") == "Male" else FEMALE_MARKER_COLOR
 
 
 def pin_icon_expression(color: str) -> str:
@@ -93,14 +99,21 @@ def pin_icon_expression(color: str) -> str:
     )
 
 
-def patient_popup_html(patient: dict) -> str:
+# def patient_popup_html(patient: dict, attributes: list) -> str: #pass as a function to the marker creation function, to filter what popups should be shown
+#     marker = ""
+#     for i in attributes:
+#         if i not in patient:
+
+#             patient[i] = "N/A"
+
+def patient_popup_html(patient: dict) -> str: #pass as a function to the marker creation function, to filter what popups should be shown 
     return (
-        f"<b>Age:</b> {patient['age at onset']}<br>"
         f"<b>Sex:</b> {patient['sex']}<br>"
-        f"<b>Year:</b> {patient['year of onset']}<br>"
-        f"<b>Glucose:</b> {patient['glucose']} mg/dL<br>"
+        f"<b>Age:</b> {patient['age at onset']}<br>"
         f"<b>pH:</b> {patient['ph']}<br>"
-        f"<b>Bicarbonate:</b> {patient['bikarb']}"
+        f"<b>Bicarbonate:</b> {patient['bikarb']}<br>"
+        f"<b>Glucose:</b> {patient['glucose']} mg/dL<br>"
+        f"<b>Year:</b> {patient['year of onset']}<br>"
     )
 
 
