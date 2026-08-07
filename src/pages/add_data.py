@@ -1,15 +1,16 @@
-import csv
-import io
+import logging
 
 from nicegui import app, events, ui
 
 from services.geocoding import geocode_patient_row
-from storage.patients_csv import (
+from storage.patients_db import (
     REQUIRED_COLUMNS,
     append_patient_rows,
-    count_rows_by_zipcode,
-    normalize_header,
+    coords_by_zipcode,
+    parse_patient_csv,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def zipcode_key(row: dict) -> tuple[str, str]:
@@ -18,7 +19,7 @@ def zipcode_key(row: dict) -> tuple[str, str]:
 
 @ui.page("/add_data")
 def add_data_page():
-    if app.storage.user.get("role") != "scientist":
+    if app.storage.user.get("role") not in {"scientist", "admin"}:
         ui.navigate.to("/")
         return
 
@@ -39,7 +40,7 @@ def add_data_page():
                 .props("flat round").tooltip("Back to map")
             with ui.column().classes("gap-0"):
                 ui.label("Add Data").classes("text-lg font-semibold text-gray-900")
-                ui.label("Create one case or import a CSV file.").classes("text-xs text-gray-500")
+                ui.label("Create one case or import a CSV file into the database.").classes("text-xs text-gray-500")
 
         with ui.column().classes("w-full max-w-4xl mx-auto p-6 gap-6"):
             with ui.card().classes("w-full p-0 gap-0"):
@@ -93,18 +94,22 @@ def add_data_page():
                                         "ph": round(float(ph.value), 2),
                                         "duration of symptoms": int(dur.value) if dur.value else "",
                                     }
-                                    duplicate_index = count_rows_by_zipcode().get(zipcode_key(row_data), 0)
-                                    row = geocode_patient_row(row_data, duplicate_index)
+                                    occupied = coords_by_zipcode().get(zipcode_key(row_data), set())
+                                    row = geocode_patient_row(row_data, occupied)
                                     append_patient_rows([row])
-                                    notice.set_text("Record saved successfully.")
+                                    notice.set_text("Record saved to database.")
                                     notice.classes("text-green-600", remove="text-red-500")
                                     for field in [age, year, month, dur, gluc, a1c, ph, bik]:
                                         field.set_value(None)
                                     sex.set_value(None)
                                     zipcode.set_value("")
                                     state.set_value("")
-                                except Exception as ex:
-                                    notice.set_text(f"Could not get coordinates: {ex}")
+                                except (ValueError, RuntimeError) as ex:
+                                    notice.set_text(str(ex))
+                                    notice.classes("text-red-500", remove="text-green-600")
+                                except Exception:
+                                    logger.exception("Failed to save patient record")
+                                    notice.set_text("Could not save record. Please try again.")
                                     notice.classes("text-red-500", remove="text-green-600")
 
                             with ui.row().classes("w-full justify-end"):
@@ -118,36 +123,35 @@ def add_data_page():
                             with ui.column().classes("w-full gap-2 rounded-md bg-gray-50 p-4"):
                                 ui.label("CSV import").classes("text-sm font-semibold text-gray-900")
                                 ui.label(
-                                    "Required columns: " + ", ".join(sorted(REQUIRED_COLUMNS))
+                                    "Required columns: " + ", ".join(sorted(REQUIRED_COLUMNS - {"a1c"}))
                                 ).classes("text-xs text-gray-500")
+                                ui.label("HbA1c and duration of symptoms may be blank; all other values are required.") \
+                                    .classes("text-xs text-gray-500")
 
                             def handle_upload(e: events.UploadEventArguments):
                                 try:
                                     content = e.content.read().decode("utf-8")
-                                    reader = csv.DictReader(io.StringIO(content))
-                                    reader.fieldnames = [
-                                        normalize_header(name)
-                                        for name in (reader.fieldnames or [])
-                                    ]
-                                    rows = list(reader)
-                                    missing = REQUIRED_COLUMNS - set(reader.fieldnames or [])
-                                    if missing:
-                                        csv_notice.set_text(f"Missing columns: {', '.join(sorted(missing))}")
-                                        csv_notice.classes("text-red-500", remove="text-green-600")
-                                        return
-                                    zipcode_counts = count_rows_by_zipcode()
+                                    rows = parse_patient_csv(content)
+                                    occupied_by_zip = coords_by_zipcode()
                                     geocoded_rows = []
                                     for row in rows:
-                                        key = zipcode_key(row)
-                                        duplicate_index = zipcode_counts.get(key, 0)
-                                        geocoded_rows.append(geocode_patient_row(row, duplicate_index))
-                                        zipcode_counts[key] = duplicate_index + 1
+                                        occupied = occupied_by_zip.setdefault(zipcode_key(row), set())
+                                        geocoded = geocode_patient_row(row, occupied)
+                                        occupied.add((geocoded["lat"], geocoded["lon"]))
+                                        geocoded_rows.append(geocoded)
                                     append_patient_rows(geocoded_rows)
-                                    csv_notice.set_text(f"{len(geocoded_rows)} records imported successfully.")
-                                    csv_notice.classes("text-green-600", remove="text-red-500")
-                                except Exception as ex:
-                                    csv_notice.set_text(f"Error reading file: {ex}")
+                                except (ValueError, RuntimeError) as ex:
+                                    csv_notice.set_text(str(ex))
                                     csv_notice.classes("text-red-500", remove="text-green-600")
+                                    return
+                                except Exception:
+                                    logger.exception("Failed to import CSV upload")
+                                    csv_notice.set_text("Could not import file. Please try again.")
+                                    csv_notice.classes("text-red-500", remove="text-green-600")
+                                    return
+
+                                csv_notice.set_text(f"{len(geocoded_rows)} records imported into the database.")
+                                csv_notice.classes("text-green-600", remove="text-red-500")
 
                             ui.upload(
                                 label="Choose CSV file",

@@ -1,3 +1,11 @@
+# Single source of truth for the filterable value ranges. The map filters,
+# their reset defaults, and the pH marker gradient all derive from these.
+AGE_MIN, AGE_MAX = 1, 48
+PH_MIN, PH_MAX = 6.65, 7.45
+BIKARB_MIN, BIKARB_MAX = 1.5, 22.0
+GLUCOSE_MIN, GLUCOSE_MAX = 150, 789
+
+
 def year_range(patients: list[dict]) -> tuple[int, int]:
     years = sorted({int(patient["year of onset"]) for patient in patients})
     return min(years), max(years)
@@ -6,17 +14,17 @@ def year_range(patients: list[dict]) -> tuple[int, int]:
 def default_filters(patients: list[dict]) -> dict:
     year_min, year_max = year_range(patients)
     return {
-        "age_min": 1,
-        "age_max": 48,
+        "age_min": AGE_MIN,
+        "age_max": AGE_MAX,
         "year_min": year_min,
         "year_max": year_max,
         "sex": {"Male", "Female"},
-        "glucose_min": 150.0,
-        "glucose_max": 789.0,
-        "ph_min": 6.65,
-        "ph_max": 7.35,
-        "bikarb_min": 1.5,
-        "bikarb_max": 22.0,
+        "glucose_min": GLUCOSE_MIN,
+        "glucose_max": GLUCOSE_MAX,
+        "ph_min": PH_MIN,
+        "ph_max": PH_MAX,
+        "bikarb_min": BIKARB_MIN,
+        "bikarb_max": BIKARB_MAX,
     }
 
 

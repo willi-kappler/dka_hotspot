@@ -4,7 +4,7 @@ import io
 EXPORT_COLUMNS = [
     "age at onset", "sex", "zipcode", "state",
     "month of onset", "year of onset", "a1c", "glucose",
-    "bikarb", "ph", "duration of symptoms", "lat", "lon",
+    "bikarb", "ph", "duration of symptoms",
 ]
 
 

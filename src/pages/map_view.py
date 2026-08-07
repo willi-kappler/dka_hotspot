@@ -2,8 +2,20 @@ from nicegui import app, ui
 
 from services.map_markers import MAP_CENTER, create_patient_marker
 from services.patient_export import patients_to_csv
-from services.patient_filters import default_filters, patient_matches, year_range
-from storage.patients_csv import load_patient_rows
+from services.patient_filters import (
+    AGE_MAX,
+    AGE_MIN,
+    BIKARB_MAX,
+    BIKARB_MIN,
+    GLUCOSE_MAX,
+    GLUCOSE_MIN,
+    PH_MAX,
+    PH_MIN,
+    default_filters,
+    patient_matches,
+    year_range,
+)
+from storage.patients_db import load_patient_rows
 
 # Hides the sidebar/header chrome and lets the map take over the whole
 # printed page, instead of printing whatever the on-screen layout happens to be.
@@ -97,10 +109,12 @@ def map_page():
         range_widgets[key] = (min_widget, max_widget)
 
     RANGE_FILTER_SPECS = [
-        ("age", "Age at onset", 1, 48, 1, 0, int, None),
-        ("ph", "pH", 6.65, 7.35, 0.01, 2, float, None),
-        ("bikarb", "Bicarbonate", 1.5, 22.0, 0.1, 1, float, "mmol/L"),
-        ("glucose", "Glucose", 150, 789, 1, 0, float, "mg/dL"),
+        ("age", "Age at onset", AGE_MIN, AGE_MAX, 1, 0, int, None),
+        ("ph", "pH", PH_MIN, PH_MAX, 0.01, 2, float, None),
+        ("bikarb", "Bicarbonate", BIKARB_MIN, BIKARB_MAX, 0.1, 1, float, "mmol/L"),
+        ("glucose", "Glucose", GLUCOSE_MIN, GLUCOSE_MAX, 1, 0, float, "mg/dL"),
+        #("year", "Year of onset", y_min, y_max, 1, 0, int, None),  # min/max number inputs (current)
+        # To try the slider version instead: comment out the "year" line above,
     ]
 
     with ui.row().classes("w-full h-screen gap-0 overflow-hidden bg-gray-100"):
@@ -118,6 +132,10 @@ def map_page():
                     with ui.row().classes("items-center gap-1"):
                         ui.icon("location_on", color="pink").classes("text-base")
                         ui.label("Female")
+                #ui.label("Lower pH appears darker within each color.").classes("text-xs text-gray-500")
+            
+            
+            #add_range_filter("age", "Age at onset", AGE_MIN, AGE_MAX, 1, 0, int)
 
             with filter_shell("Sex"):
                 sex_checks: dict[str, ui.checkbox] = {}
@@ -135,9 +153,14 @@ def map_page():
             for key, title, low, high, step, decimals, value_type, unit in RANGE_FILTER_SPECS:
                 add_range_filter(key, title, low, high, step, decimals, value_type, unit)
 
+            # --- Alternative "Year of onset" filter: two-handle slider ---
+            # Disabled for now. To switch to this version: comment out the
+            # ("year", ...) line in RANGE_FILTER_SPECS above, then uncomment
+            # this whole block plus the two lines it needs in reset_filters below.
+            
             with filter_shell("Year of onset"):
                 # Left/right labels track the currently selected min/max year and
-                # update live as the slider handles move.
+                # update live as the handles move — no separate static readout needed.
                 with ui.row().classes("w-full items-center justify-between"):
                     year_min_label = ui.label(str(y_min)).classes("text-xs font-medium text-gray-400")
                     year_max_label = ui.label(str(y_max)).classes("text-xs font-medium text-gray-400")
@@ -150,15 +173,15 @@ def map_page():
                     filters.update(year_min=year_min, year_max=year_max)
                     year_min_label.set_text(str(year_min))
                     year_max_label.set_text(str(year_max))
-                    on_change()
+                    on_change()  # re-filter the map markers with the new year range
 
                 year_slider = ui.range(
                     min=y_min,
                     max=y_max,
                     step=1,
-                    value={"min": y_min, "max": y_max},
+                    value={"min": y_min, "max": y_max},  # start with the full range selected
                     on_change=on_year_slider_change,
-                ).props("color=blue-7 thumb-size=18px track-size=6px").classes("w-full px-1")
+                ).props('color=blue-7 thumb-size=18px track-size=6px').classes("w-full px-1")
 
             def reset_filters():
                 fresh = default_filters(patients)
@@ -167,9 +190,11 @@ def map_page():
                 for key, (min_widget, max_widget) in range_widgets.items():
                     min_widget.set_value(fresh[f"{key}_min"])
                     max_widget.set_value(fresh[f"{key}_max"])
-                year_slider.set_value({"min": fresh["year_min"], "max": fresh["year_max"]})
-                year_min_label.set_text(str(fresh["year_min"]))
-                year_max_label.set_text(str(fresh["year_max"]))
+                # If using the slider version above, uncomment these lines
+                # (and comment out the "year" line in RANGE_FILTER_SPECS instead):
+                # year_slider.set_value({"min": fresh["year_min"], "max": fresh["year_max"]})
+                # year_min_label.set_text(str(fresh["year_min"]))
+                # year_max_label.set_text(str(fresh["year_max"]))
                 filters.clear()
                 filters.update(fresh)
                 on_change()
@@ -182,11 +207,19 @@ def map_page():
                 csv_bytes = patients_to_csv(matched)
                 ui.download(csv_bytes, filename="dka_filtered_cases.csv", media_type="text/csv")
 
+            # --- Original: stacked full-width buttons ---
             ui.button("Export CSV", icon="download", on_click=export_csv) \
                 .props("outline").classes("w-full text-gray-700")
-
+            
             ui.button("Print map", icon="print", on_click=lambda: ui.run_javascript("window.print()")) \
                 .props("outline").classes("w-full text-gray-700")
+
+            # # --- Alternative: side by side, compact ---
+            # with ui.row().classes("w-full gap-2"):
+            #     ui.button("Export CSV", icon="download", on_click=export_csv) \
+            #         .props("outline dense size=sm").classes("flex-1 text-gray-700")
+            #     ui.button("Print", icon="print", on_click=lambda: ui.run_javascript("window.print()")) \
+            #         .props("outline dense size=sm").classes("flex-1 text-gray-700")
 
         with ui.column().classes("flex-1 h-full gap-0"):
             with ui.row().classes("no-print h-14 w-full items-center border-b border-gray-200 bg-white px-5 gap-2"):
@@ -194,9 +227,19 @@ def map_page():
                     ui.label("Diabetic Ketoacidosis Analysis").classes("text-base font-semibold text-gray-900")
                     ui.label(f"Signed in as {username} ({role})").classes("text-xs text-gray-500")
                 ui.space()
-                if role == "scientist":
+                ui.button("Hotspots", icon="local_fire_department",
+                          on_click=lambda: ui.navigate.to("/hotspot")) \
+                    .props("flat").classes("text-blue-700")
+                if role in {"scientist", "admin"}:
                     ui.button("Add Data", icon="add_circle",
                               on_click=lambda: ui.navigate.to("/add_data")) \
+                        .props("flat").classes("text-blue-700")
+                if role == "admin":
+                    ui.button("Cases", icon="edit_note",
+                              on_click=lambda: ui.navigate.to("/admin/cases")) \
+                        .props("flat").classes("text-blue-700")
+                    ui.button("Users", icon="admin_panel_settings",
+                              on_click=lambda: ui.navigate.to("/admin/users")) \
                         .props("flat").classes("text-blue-700")
                 ui.button(icon="logout", on_click=lambda: ui.navigate.to("/logout")) \
                     .props("flat round").classes("text-gray-600").tooltip("Log out")

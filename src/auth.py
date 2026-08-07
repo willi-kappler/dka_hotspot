@@ -1,12 +1,18 @@
-CREDENTIALS: dict[str, dict] = {
-    "user":      {"password": "user123",  "role": "user"},
-    "scientist": {"password": "sci123",   "role": "scientist"},
-}
+from rate_limit import check_not_locked_out, record_failure, record_success
+from storage.users_db import authenticate_user
 
 
 def authenticate(username: str, password: str) -> str | None:
-    """Return role if credentials match, else None."""
-    entry = CREDENTIALS.get(username)
-    if entry and entry["password"] == password:
-        return entry["role"]
+    """Return role if credentials match an active database user.
+
+    Raises LockedOutError if this username has failed too many times recently.
+    """
+    check_not_locked_out(username)
+
+    role = authenticate_user(username, password)
+    if role:
+        record_success(username)
+        return role
+
+    record_failure(username)
     return None

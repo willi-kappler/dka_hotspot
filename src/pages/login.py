@@ -1,5 +1,6 @@
 from nicegui import ui, app
 from auth import authenticate
+from rate_limit import LockedOutError
 
 
 def login_page():
@@ -13,7 +14,12 @@ def login_page():
             error = ui.label("").classes("text-red-500 text-sm")
 
             def try_login():
-                role = authenticate(username.value.strip(), password.value)
+                try:
+                    role = authenticate(username.value.strip(), password.value)
+                except LockedOutError as ex:
+                    error.text = str(ex)
+                    return
+
                 if role:
                     app.storage.user["role"] = role
                     app.storage.user["username"] = username.value.strip()

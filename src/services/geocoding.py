@@ -1,9 +1,9 @@
 import json
 import math
-import os
-from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+from env import get_env
 
 GEOAPIFY_URL = "https://api.geoapify.com/v1/geocode/search"
 COUNTRY = "Germany"
@@ -15,20 +15,7 @@ geocode_cache: dict[tuple[str, str], tuple[float, float]] = {}
 
 
 def get_geoapify_api_key() -> str:
-    env_key = os.getenv("GEOAPIFY_API_KEY")
-    if env_key:
-        return env_key
-
-    env_file = Path(__file__).resolve().parents[2] / ".env"
-    if not env_file.exists():
-        return ""
-
-    for line in env_file.read_text(encoding="utf-8").splitlines():
-        key, separator, value = line.partition("=")
-        if separator and key.strip() == "GEOAPIFY_API_KEY":
-            return value.strip().strip('"').strip("'")
-
-    return ""
+    return get_env("GEOAPIFY_API_KEY")
 
 
 def geocode_zipcode(zipcode: str, state: str = "") -> tuple[float, float]:
@@ -80,6 +67,9 @@ def geocode_zipcode(zipcode: str, state: str = "") -> tuple[float, float]:
     return lat, lon
 
 
+# Vogel spiral (golden-angle / phyllotaxis spiral, Vogel 1979): each duplicate
+# is placed at angle n x 137.5deg and radius ~ sqrt(n), the sunflower-seed pattern,
+# which spreads markers around the zip centroid evenly without overlaps.
 def jitter_coordinates(lat: float, lon: float, duplicate_index: int) -> tuple[float, float]:
     if duplicate_index <= 0:
         return round(lat, 4), round(lon, 4)
@@ -93,7 +83,21 @@ def jitter_coordinates(lat: float, lon: float, duplicate_index: int) -> tuple[fl
     return round(lat + lat_offset, 4), round(lon + lon_offset, 4)
 
 
-def geocode_patient_row(row: dict, duplicate_index: int = 0) -> dict:
+def next_free_duplicate_index(lat: float, lon: float, occupied_coords: set[tuple[float, float]]) -> int:
+    """Return the first spiral index whose jittered position is not already taken.
+
+    Deriving the index from the actual occupied coordinates (rather than a row
+    count) keeps markers from stacking after rows are deleted: a count-based
+    index would reuse spiral positions that are still occupied by other rows.
+    """
+    index = 0
+    while jitter_coordinates(lat, lon, index) in occupied_coords:
+        index += 1
+    return index
+
+
+def geocode_patient_row(row: dict, occupied_coords: set[tuple[float, float]] | None = None) -> dict:
     lat, lon = geocode_zipcode(row.get("zipcode", ""), row.get("state", ""))
+    duplicate_index = next_free_duplicate_index(lat, lon, occupied_coords or set())
     lat, lon = jitter_coordinates(lat, lon, duplicate_index)
     return {**row, "lat": lat, "lon": lon}
