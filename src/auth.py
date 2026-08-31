@@ -22,7 +22,7 @@ def authenticate(username: str, password: str) -> str | None:
 
     role = authenticate_user(clean_username, password)
     if role:
-        record_success(clean_username)
+        record_success(clean_username) # wipes failure counter
         audit_db.record(audit_db.LOGIN_SUCCEEDED, clean_username, detail=f"role={role}")
         return role
 
