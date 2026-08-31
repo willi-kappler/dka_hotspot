@@ -1,0 +1,74 @@
+zip_code,city,kreis,children_u18_synthetic,gisd_score_2023,gisd_decile_bw,is_planted_hotspot
+72070,Tübingen,Kreis Tübingen,2859,0.33439,3,no
+72072,Tübingen,Kreis Tübingen,5970,0.33461,3,no
+72074,Tübingen,Kreis Tübingen,8718,0.33454,3,no
+72076,Tübingen,Kreis Tübingen,3644,0.33474,3,no
+72108,Rottenburg am Neckar,Kreis Tübingen,1021,0.30822,2,yes
+72116,Mössingen,Kreis Tübingen,434,0.31361,2,no
+72119,Ammerbuch,Kreis Tübingen,1649,0.28068,1,no
+72124,Pliezhausen,Kreis Reutlingen,627,0.37925,4,no
+72131,Ofterdingen,Kreis Tübingen,791,0.29608,2,no
+72135,Dettenhausen,Kreis Tübingen,1155,0.26986,1,no
+72138,Kirchentellinsfurt,Kreis Tübingen,789,0.27872,1,no
+72141,Walddorfhäslach,Kreis Reutlingen,2961,0.37215,4,no
+72144,Dußlingen,Kreis Tübingen,934,0.28827,2,no
+72145,Hirrlingen,Kreis Tübingen,5416,0.27185,1,no
+72147,Nehren/Württemberg,Kreis Tübingen,1282,0.28259,2,no
+72149,Neustetten,Kreis Tübingen,1012,0.2824,2,no
+72181,Starzach,Kreis Tübingen,1535,0.2861,2,no
+72336,Balingen,Zollernalbkreis,1803,0.45801,8,yes
+72351,Geislingen b. Balingen,Zollernalbkreis,924,0.43846,7,no
+72355,Schömberg b. Balingen,Zollernalbkreis,983,0.46241,8,no
+72356,Dautmergen,Zollernalbkreis,1101,0.43308,7,no
+72358,Dormettingen,Zollernalbkreis,851,0.46308,8,no
+72359,Dotternhausen,Zollernalbkreis,441,0.43932,7,no
+72361,Hausen am Tann,Zollernalbkreis,1350,0.47346,9,no
+72362,Nusplingen,Zollernalbkreis,689,0.44064,7,no
+72364,Obernheim/Württemberg,Zollernalbkreis,617,0.43946,7,no
+72365,Ratshausen,Zollernalbkreis,1042,0.42931,7,no
+72367,Weilen unter den Rinnen,Zollernalbkreis,1005,0.42492,7,no
+72369,Zimmern unter der Burg,Zollernalbkreis,1291,0.4283,7,no
+72379,Hechingen,Zollernalbkreis,1538,0.47764,9,no
+72393,Burladingen,Zollernalbkreis,562,0.45368,8,no
+72406,Bisingen,Zollernalbkreis,401,0.44797,8,no
+72411,Bodelshausen,Kreis Tübingen,772,0.29877,2,no
+72414,Rangendingen,Zollernalbkreis,2040,0.43623,7,no
+72415,Grosselfingen,Zollernalbkreis,697,0.44828,8,no
+72417,Jungingen,Zollernalbkreis,598,0.45523,8,no
+72458,Albstadt,Zollernalbkreis,3736,0.49495,9,yes
+72459,Albstadt,Zollernalbkreis,475,0.49493,9,no
+72461,Albstadt,Zollernalbkreis,6048,0.49492,9,no
+72469,Meßstetten,Zollernalbkreis,821,0.4685,8,no
+72474,Winterlingen,Zollernalbkreis,761,0.45095,8,no
+72475,Bitz,Zollernalbkreis,719,0.44716,8,no
+72479,Straßberg b. Hohenz,Zollernalbkreis,828,0.44252,7,no
+72525,Münsingen,Kreis Reutlingen,1252,0.40909,6,yes
+72531,Hohenstein/Württemberg,Kreis Reutlingen,793,0.39024,5,no
+72532,Gomadingen,Kreis Reutlingen,422,0.39319,5,no
+72534,Hayingen,Kreis Reutlingen,303,0.40866,6,no
+72537,Mehrstetten,Kreis Reutlingen,595,0.4037799999999999,6,no
+72539,Pfronstetten,Kreis Reutlingen,553,0.38664,4,no
+72555,Metzingen,Kreis Reutlingen,462,0.39767,5,no
+72574,Bad Urach,Kreis Reutlingen,438,0.40855,6,no
+72581,Dettingen an der Erms,Kreis Reutlingen,581,0.4131,6,no
+72582,Grabenstetten,Kreis Reutlingen,864,0.36239,4,no
+72584,Hülben,Kreis Reutlingen,439,0.38898,5,no
+72585,Riederich,Kreis Reutlingen,793,0.37814,4,no
+72587,Römerstein,Kreis Reutlingen,624,0.37692,4,no
+72661,Grafenberg,Kreis Reutlingen,1015,0.35244,3,no
+72760,Reutlingen,Kreis Reutlingen,2275,0.43128,7,no
+72762,Reutlingen,Kreis Reutlingen,9377,0.43118,7,no
+72764,Reutlingen,Kreis Reutlingen,7594,0.43107,7,no
+72766,Reutlingen,Kreis Reutlingen,3381,0.43063,7,no
+72768,Reutlingen,Kreis Reutlingen,6930,0.43063,7,no
+72770,Reutlingen,Kreis Reutlingen,1790,0.42938,7,no
+72793,Pfullingen,Kreis Reutlingen,306,0.41035,6,no
+72800,Eningen unter Achalm,Kreis Reutlingen,1461,0.42123,6,no
+72805,Lichtenstein/Württemberg,Kreis Reutlingen,910,0.41499,6,no
+72810,Gomaringen,Kreis Tübingen,831,0.28426,2,no
+72813,St. Johann,Kreis Reutlingen,331,0.3763,4,no
+72818,Trochtelfingen,Kreis Reutlingen,1079,0.39258,5,no
+72820,Sonnenbühl,Kreis Reutlingen,968,0.38305,4,no
+72827,Wannweil,Kreis Reutlingen,592,0.38715,4,no
+72829,Engstingen,Kreis Reutlingen,451,0.38618,4,no
+88529,Zwiefalten,Kreis Reutlingen,439,0.42025,6,no

@@ -1,265 +1,482 @@
-from nicegui import app, ui
+"""Scientist case map."""
 
-from services.map_markers import MAP_CENTER, create_patient_marker
-from services.patient_export import patients_to_csv
-from services.patient_filters import (
-    AGE_MAX,
-    AGE_MIN,
-    BIKARB_MAX,
-    BIKARB_MIN,
-    GLUCOSE_MAX,
-    GLUCOSE_MIN,
-    PH_MAX,
-    PH_MIN,
-    default_filters,
-    patient_matches,
-    year_range,
+from html import escape
+
+from nicegui import ui
+
+from pages.shared import header, notice, require
+from services.deprivation import mean_score, tertile_for
+from services.epidemiology import SEVERITY_ORDER, severity, split_manifestations
+from services.geography import (
+    KREISE_WITHOUT_CLINIC,
+    clinics_on_map,
+    kreis_name,
+    paediatric_practices,
+    pilot_boundaries,
+    pilot_view,
+    plz5_centroids,
+    plz5_jitter_radius,
+    plz5_kreis,
+    plz5_label,
+    plz5_outside_region,
 )
-from storage.patients_db import load_patient_rows
+from services.markers import (
+    FEMALE_STOPS,
+    MALE_STOPS,
+    marker_colour,
+    pin_icon,
+    popup_html,
+    spiral_offset,
+)
+from storage.cases_db import load_cases
 
-# Hides the sidebar/header chrome and lets the map take over the whole
-# printed page, instead of printing whatever the on-screen layout happens to be.
-PRINT_STYLE = """
-<style>
+# Maximum number of readable pins.
+MAX_PINS = 1200
+
+CAPTION = "text-xs text-slate-500 leading-relaxed"
+
+# A4 landscape, 12 mm margins, minus the caption block: 273 x 145 mm of map.
+# The pixel pair is the same box at 96 dpi and is what the map is resized to
+# on screen before printing — see PRINT_JS.
+PRINT_MAP_MM = (273, 145)
+PRINT_MAP_PX = (1032, 548)
+
+# Two rule sets for one layout. The ``at-printing`` block applies on screen
+# while the sheet is prepared, so Leaflet actually reflows and fetches tiles at
+# the printed size; the ``@media print`` block is the page itself. Sizing only
+# in @media print was the bug: the map kept its screen layout and got stretched
+# into the print box, clipping the right edge.
+PRINT_CSS = """
+.print-only { display: none; }
+
+body.at-printing .at-sheet,
+body.at-printing .at-map-frame {
+    height: auto !important; min-height: 0 !important; display: block !important;
+}
+body.at-printing .print-map {
+    width: %dpx !important; height: %dpx !important; flex: none !important;
+}
+
 @media print {
-    /* Browsers drop background colors by default when printing (to save ink) —
-       this forces them to print exactly as shown, so the colored marker pins
-       don't come out blank/white. */
-    * {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-        color-adjust: exact !important;
+    @page { size: A4 landscape; margin: 12mm; }
+    html, body, .q-layout, .q-page-container, .q-page, .nicegui-content,
+    .at-sheet, .at-map-frame {
+        height: auto !important; min-height: 0 !important; overflow: visible !important;
+        background: #fff !important;
     }
     .no-print { display: none !important; }
-    .print-target {
-        position: fixed !important;
-        top: 0 !important;
-        left: 0 !important;
-        width: 100vw !important;
-        height: 100vh !important;
-        margin: 0 !important;
+    .print-only { display: block !important; }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    .print-map {
+        width: %dmm !important; height: %dmm !important; flex: none !important;
     }
+    .leaflet-control-container, .leaflet-marker-shadow { display: none !important; }
+    /* Stacked drop shadows read as grey smudges where pins crowd. */
+    .leaflet-marker-icon div { box-shadow: none !important; }
 }
-</style>
-"""
+""" % (PRINT_MAP_PX + PRINT_MAP_MM)
 
+# Resize on screen, let Leaflet settle and fetch tiles for that box, then print.
+# The hard cap matters because a tile that 404s never fires ``load``.
+PRINT_JS = """
+const el = getElement(%d);
+const map = el.map;
+document.body.classList.add('at-printing');
+map.invalidateSize();
+await new Promise(r => setTimeout(r, 200));
+await new Promise(resolve => {
+    let settled = false;
+    const done = () => { if (!settled) { settled = true; resolve(); } };
+    let waiting = 0;
+    map.eachLayer(layer => {
+        if (layer instanceof L.TileLayer) { waiting += 1; layer.once('load', done); }
+    });
+    if (waiting === 0) { done(); }
+    setTimeout(done, 4000);
+});
+await new Promise(r => setTimeout(r, 150));
+window.print();
+document.body.classList.remove('at-printing');
+map.invalidateSize();
+"""
 
 @ui.page("/map")
 def map_page():
-    if not app.storage.user.get("role"):
-        ui.navigate.to("/")
+    if not require("scientist", "admin"):
         return
 
-    ui.add_head_html(PRINT_STYLE)
+    ui.add_css(PRINT_CSS)
 
-    role = app.storage.user["role"]
-    username = app.storage.user.get("username", role)
-    patients = load_patient_rows()
-    filters = default_filters(patients)
-    y_min, y_max = year_range(patients)
+    loaded_cases = load_cases()
+    eligibility = split_manifestations(loaded_cases)
+    cases = eligibility["eligible"]
+    centroids = plz5_centroids()
+    years = sorted({case["year_of_onset"] for case in cases}) or [2014, 2025]
 
-    active_markers: list = []
+    filters = {
+        "year_min": years[0],
+        "year_max": years[-1],
+        "sexes": {"Male", "Female"},
+        "age_min": 0,
+        "age_max": 19,
+        "severities": set(SEVERITY_ORDER),
+        "dka_only": True,
+    }
+    overlays = {"clinics": True, "practices": False}
+    circles: list = []
+    markers: list = []
 
-    def refresh_markers(m, count_label):
-        for marker in active_markers:
-            marker.run_method("remove")
-        active_markers.clear()
+    with ui.column().classes("w-full h-screen gap-0 at-sheet"):
+        header("Case map", "One pin per case · colour by sex, depth by pH")
 
-        matched = [p for p in patients if patient_matches(p, filters)]
-        count_label.set_text(f"{len(matched)} of {len(patients)} cases shown")
+        with ui.column().classes("w-full print-only gap-1 pb-2"):
+            ui.label(
+                "DKA at type 1 manifestation — Tübingen, Reutlingen, Zollernalbkreis"
+            ).classes("text-lg font-bold text-slate-900")
+            print_caption = ui.label().classes("text-xs text-slate-700")
+            with ui.row().classes("items-center gap-5 pt-1"):
+                for legend_label, legend_stops in (("Male", MALE_STOPS), ("Female", FEMALE_STOPS)):
+                    with ui.row().classes("items-center gap-2"):
+                        legend_gradient = ", ".join(
+                            f"{colour} {position * 100:.0f}%"
+                            for position, colour in reversed(legend_stops)
+                        )
+                        ui.html(
+                            f'<span style="display:inline-block;width:56px;height:12px;'
+                            f'border:1px solid #cbd5e1;border-radius:2px;'
+                            f'background:linear-gradient(to right, {legend_gradient})"></span>'
+                        )
+                        ui.label(legend_label).classes("text-xs text-slate-600")
+                ui.label("Darker is a lower pH.").classes("text-xs text-slate-600")
+            ui.label(
+                "Pin positions are scattered around the postcode centroid and are "
+                "not patient addresses. Zollernalbkreis (dashed) has no "
+                "participating clinic, so its cases are not comparable."
+            ).classes("text-xs text-slate-600")
 
-        for p in matched:
-            marker = create_patient_marker(m, p)
-            if marker:
-                active_markers.append(marker)
-
-    def filter_shell(title: str):
-        with ui.column().classes("w-full gap-2 border-b border-gray-200 pb-4"):
-            ui.label(title).classes("text-xs font-semibold uppercase text-gray-500")
-            return ui.column().classes("w-full gap-2")
-
-    def filter_number(label: str, **props):
-        with ui.column().classes("gap-1 flex-1 min-w-0"):
-            ui.label(label).classes("text-[11px] font-medium text-gray-500")
-            return ui.number(**props).props("dense outlined").classes("w-full")
-
-    def on_change():
-        refresh_markers(map_widget, count_label)
-
-    range_widgets: dict[str, tuple] = {}
-
-    def add_range_filter(key: str, title: str, low, high, step, decimals: int, value_type, unit: str | None = None):
-        fmt = f"%.{decimals}f"
-        with filter_shell(title):
-            if unit:
-                ui.label(unit).classes("text-xs text-gray-400")
-            with ui.row().classes("w-full gap-2"):
-                min_widget = filter_number(
-                    "Min", value=low, min=low, max=high, step=step, format=fmt,
-                    on_change=lambda e, k=key, lo=low, vt=value_type: (
-                        filters.update({f"{k}_min": vt(e.value or lo)}), on_change(),
-                    ),
+        if eligibility["unknown_new_onset"]:
+            with ui.column().classes("w-full max-w-3xl mx-auto p-8"):
+                notice(
+                    f"{len(eligibility['unknown_new_onset'])} records have unknown "
+                    "new-onset status. Resolve them before mapping manifestations.",
+                    tone="blocked",
                 )
-                max_widget = filter_number(
-                    "Max", value=high, min=low, max=high, step=step, format=fmt,
-                    on_change=lambda e, k=key, hi=high, vt=value_type: (
-                        filters.update({f"{k}_max": vt(e.value or hi)}), on_change(),
-                    ),
+            return
+
+        if not loaded_cases:
+            with ui.column().classes("w-full max-w-3xl mx-auto p-8"):
+                notice("No cases loaded. Import them under Data.", tone="blocked")
+            return
+
+        if not cases:
+            with ui.column().classes("w-full max-w-3xl mx-auto p-8"):
+                notice("No confirmed first manifestations are available.", tone="blocked")
+            return
+
+        if not centroids:
+            with ui.column().classes("w-full max-w-3xl mx-auto p-8"):
+                notice(
+                    "No postcode coordinates are loaded, so the map cannot be "
+                    "drawn. Run scripts/build_plz5_coordinates.py.",
+                    tone="blocked",
                 )
-        range_widgets[key] = (min_widget, max_widget)
+            return
 
-    RANGE_FILTER_SPECS = [
-        ("age", "Age at onset", AGE_MIN, AGE_MAX, 1, 0, int, None),
-        ("ph", "pH", PH_MIN, PH_MAX, 0.01, 2, float, None),
-        ("bikarb", "Bicarbonate", BIKARB_MIN, BIKARB_MAX, 0.1, 1, float, "mmol/L"),
-        ("glucose", "Glucose", GLUCOSE_MIN, GLUCOSE_MAX, 1, 0, float, "mg/dL"),
-        #("year", "Year of onset", y_min, y_max, 1, 0, int, None),  # min/max number inputs (current)
-        # To try the slider version instead: comment out the "year" line above,
-    ]
+        with ui.row().classes("w-full flex-1 min-h-0 gap-0 at-map-frame"):
+            with ui.column().classes(
+                "w-72 h-full shrink-0 overflow-y-auto border-r border-slate-200 "
+                "bg-white px-5 py-4 gap-4 no-print"
+            ):
+                count_label = ui.label().classes("text-sm font-medium text-slate-700")
+                too_many = ui.label().classes(
+                    "text-xs text-amber-800 bg-amber-50 rounded p-2 leading-relaxed"
+                )
+                too_many.set_visibility(False)
 
-    with ui.row().classes("w-full h-screen gap-0 overflow-hidden bg-gray-100"):
-        with ui.column().classes("no-print w-80 h-full shrink-0 overflow-y-auto border-r border-gray-200 bg-white px-5 py-4 gap-5"):
-            with ui.column().classes("gap-1"):
-                ui.label("DKA Hotspot Map").classes("text-xl font-semibold text-gray-900")
-                count_label = ui.label(f"{len(patients)} of {len(patients)} cases shown").classes("text-sm text-gray-500")
+                ui.label("Period").classes(
+                    "text-xs font-semibold uppercase tracking-wide text-slate-500"
+                )
+                with ui.row().classes("w-full justify-between"):
+                    year_low = ui.label(str(years[0])).classes("text-xs text-slate-500")
+                    year_high = ui.label(str(years[-1])).classes("text-xs text-slate-500")
 
-            with ui.column().classes("gap-2 rounded-md bg-gray-50 p-3"):
-                ui.label("Marker legend").classes("text-xs font-semibold uppercase text-gray-500")
-                with ui.row().classes("items-center gap-4 text-xs text-gray-700"):
-                    with ui.row().classes("items-center gap-1"):
-                        ui.icon("location_on", color="blue").classes("text-base")
-                        ui.label("Male")
-                    with ui.row().classes("items-center gap-1"):
-                        ui.icon("location_on", color="pink").classes("text-base")
-                        ui.label("Female")
-                #ui.label("Lower pH appears darker within each color.").classes("text-xs text-gray-500")
-            
-            
-            #add_range_filter("age", "Age at onset", AGE_MIN, AGE_MAX, 1, 0, int)
+                def on_years(event):
+                    filters["year_min"] = int(event.value["min"])
+                    filters["year_max"] = int(event.value["max"])
+                    year_low.set_text(str(filters["year_min"]))
+                    year_high.set_text(str(filters["year_max"]))
+                    refresh()
 
-            with filter_shell("Sex"):
-                sex_checks: dict[str, ui.checkbox] = {}
+                ui.range(
+                    min=years[0], max=years[-1], step=1,
+                    value={"min": years[0], "max": years[-1]}, on_change=on_years,
+                ).props("color=blue-7 thumb-size=18px").classes("w-full px-1")
 
-                def on_sex_change():
-                    filters["sex"] = {s for s, cb in sex_checks.items() if cb.value}
-                    on_change()
+                ui.label("Age at onset").classes(
+                    "text-xs font-semibold uppercase tracking-wide text-slate-500"
+                )
+                with ui.row().classes("w-full justify-between"):
+                    age_low = ui.label("0").classes("text-xs text-slate-500")
+                    age_high = ui.label("19").classes("text-xs text-slate-500")
 
+                def on_ages(event):
+                    filters["age_min"] = int(event.value["min"])
+                    filters["age_max"] = int(event.value["max"])
+                    age_low.set_text(str(filters["age_min"]))
+                    age_high.set_text(str(filters["age_max"]))
+                    refresh()
+
+                ui.range(
+                    min=0, max=19, step=1, value={"min": 0, "max": 19},
+                    on_change=on_ages,
+                ).props("color=blue-7 thumb-size=18px").classes("w-full px-1")
+
+                ui.label("Sex").classes(
+                    "text-xs font-semibold uppercase tracking-wide text-slate-500"
+                )
+                sex_boxes = {}
                 with ui.row().classes("w-full gap-2"):
-                    for sex_val in ("Male", "Female"):
-                        cb = ui.checkbox(sex_val, value=True, on_change=lambda _: on_sex_change())
-                        cb.props("dense").classes("flex-1 rounded-md border border-gray-200 px-2 py-1")
-                        sex_checks[sex_val] = cb
+                    for sex in ("Male", "Female"):
+                        def on_sex(_, value=sex):
+                            if sex_boxes[value].value:
+                                filters["sexes"].add(value)
+                            else:
+                                filters["sexes"].discard(value)
+                            refresh()
+                        sex_boxes[sex] = ui.checkbox(
+                            sex, value=True, on_change=on_sex
+                        ).props("dense").classes("flex-1")
 
-            for key, title, low, high, step, decimals, value_type, unit in RANGE_FILTER_SPECS:
-                add_range_filter(key, title, low, high, step, decimals, value_type, unit)
+                ui.label("DKA severity").classes(
+                    "text-xs font-semibold uppercase tracking-wide text-slate-500"
+                )
+                severity_boxes = {}
+                for level in SEVERITY_ORDER:
+                    def on_severity(_, value=level):
+                        if severity_boxes[value].value:
+                            filters["severities"].add(value)
+                        else:
+                            filters["severities"].discard(value)
+                        refresh()
+                    severity_boxes[level] = ui.checkbox(
+                        level, value=True, on_change=on_severity
+                    ).props("dense")
 
-            # --- Alternative "Year of onset" filter: two-handle slider ---
-            # Disabled for now. To switch to this version: comment out the
-            # ("year", ...) line in RANGE_FILTER_SPECS above, then uncomment
-            # this whole block plus the two lines it needs in reset_filters below.
-            
-            with filter_shell("Year of onset"):
-                # Left/right labels track the currently selected min/max year and
-                # update live as the handles move — no separate static readout needed.
-                with ui.row().classes("w-full items-center justify-between"):
-                    year_min_label = ui.label(str(y_min)).classes("text-xs font-medium text-gray-400")
-                    year_max_label = ui.label(str(y_max)).classes("text-xs font-medium text-gray-400")
+                def on_dka_only(event):
+                    filters["dka_only"] = bool(event.value)
+                    refresh()
 
-                def on_year_slider_change(e):
-                    # ui.range's on_change event gives e.value as {'min': ..., 'max': ...}
-                    # rather than a single number, because it has two draggable handles.
-                    year_min = int(e.value["min"])
-                    year_max = int(e.value["max"])
-                    filters.update(year_min=year_min, year_max=year_max)
-                    year_min_label.set_text(str(year_min))
-                    year_max_label.set_text(str(year_max))
-                    on_change()  # re-filter the map markers with the new year range
+                ui.switch(
+                    "Ketoacidosis only", value=True, on_change=on_dka_only
+                ).props("dense").classes("text-sm")
+                ui.label(
+                    "Off includes manifestations that did not meet the "
+                    "biochemical threshold."
+                ).classes(CAPTION)
 
-                year_slider = ui.range(
-                    min=y_min,
-                    max=y_max,
-                    step=1,
-                    value={"min": y_min, "max": y_max},  # start with the full range selected
-                    on_change=on_year_slider_change,
-                ).props('color=blue-7 thumb-size=18px track-size=6px').classes("w-full px-1")
+                ui.separator()
+                ui.label("Overlays").classes(
+                    "text-xs font-semibold uppercase tracking-wide text-slate-500"
+                )
 
-            def reset_filters():
-                fresh = default_filters(patients)
-                for cb in sex_checks.values():
-                    cb.set_value(True)
-                for key, (min_widget, max_widget) in range_widgets.items():
-                    min_widget.set_value(fresh[f"{key}_min"])
-                    max_widget.set_value(fresh[f"{key}_max"])
-                # If using the slider version above, uncomment these lines
-                # (and comment out the "year" line in RANGE_FILTER_SPECS instead):
-                # year_slider.set_value({"min": fresh["year_min"], "max": fresh["year_max"]})
-                # year_min_label.set_text(str(fresh["year_min"]))
-                # year_max_label.set_text(str(fresh["year_max"]))
-                filters.clear()
-                filters.update(fresh)
-                on_change()
+                def on_overlay(key):
+                    def handler(event):
+                        overlays[key] = bool(event.value)
+                        refresh()
+                    return handler
 
-            ui.button("Reset filters", icon="restart_alt", on_click=reset_filters) \
-                .props("outline").classes("w-full text-gray-700")
+                ui.checkbox("Hospitals", value=True, on_change=on_overlay("clinics")) \
+                    .props("dense")
+                ui.checkbox("Paediatric practices", value=False,
+                            on_change=on_overlay("practices")).props("dense")
 
-            def export_csv():
-                matched = [p for p in patients if patient_matches(p, filters)]
-                csv_bytes = patients_to_csv(matched)
-                ui.download(csv_bytes, filename="dka_filtered_cases.csv", media_type="text/csv")
+                ui.separator()
+                ui.label("Pin colour").classes(
+                    "text-xs font-semibold uppercase tracking-wide text-slate-500"
+                )
+                for label, stops in (("Male", MALE_STOPS), ("Female", FEMALE_STOPS)):
+                    with ui.row().classes("items-center gap-2"):
+                        gradient = ", ".join(
+                            f"{colour} {position * 100:.0f}%"
+                            for position, colour in reversed(stops)
+                        )
+                        ui.html(
+                            f'<span style="display:inline-block;width:56px;height:12px;'
+                            f'border:1px solid #cbd5e1;border-radius:2px;'
+                            f'background:linear-gradient(to right, {gradient})"></span>'
+                        )
+                        ui.label(label).classes("text-xs text-slate-600")
+                ui.label(
+                    "Darker means lower pH, so a deeper pin is a child who "
+                    "arrived more acidotic."
+                ).classes(CAPTION)
 
-            # --- Original: stacked full-width buttons ---
-            ui.button("Export CSV", icon="download", on_click=export_csv) \
-                .props("outline").classes("w-full text-gray-700")
-            
-            ui.button("Print map", icon="print", on_click=lambda: ui.run_javascript("window.print()")) \
-                .props("outline").classes("w-full text-gray-700")
+                ui.label(
+                    "Each pin is one case, scattered around its postcode "
+                    "centroid — a drawn position, never an address."
+                ).classes(CAPTION)
 
-            # # --- Alternative: side by side, compact ---
-            # with ui.row().classes("w-full gap-2"):
-            #     ui.button("Export CSV", icon="download", on_click=export_csv) \
-            #         .props("outline dense size=sm").classes("flex-1 text-gray-700")
-            #     ui.button("Print", icon="print", on_click=lambda: ui.run_javascript("window.print()")) \
-            #         .props("outline dense size=sm").classes("flex-1 text-gray-700")
+                ui.separator()
 
-        with ui.column().classes("flex-1 h-full gap-0"):
-            with ui.row().classes("no-print h-14 w-full items-center border-b border-gray-200 bg-white px-5 gap-2"):
-                with ui.column().classes("gap-0"):
-                    ui.label("Diabetic Ketoacidosis Analysis").classes("text-base font-semibold text-gray-900")
-                    ui.label(f"Signed in as {username} ({role})").classes("text-xs text-gray-500")
-                ui.space()
-                ui.button("Hotspots", icon="local_fire_department",
-                          on_click=lambda: ui.navigate.to("/hotspot")) \
-                    .props("flat").classes("text-blue-700")
-                if role in {"scientist", "admin"}:
-                    ui.button("Add Data", icon="add_circle",
-                              on_click=lambda: ui.navigate.to("/add_data")) \
-                        .props("flat").classes("text-blue-700")
-                if role == "admin":
-                    ui.button("Cases", icon="edit_note",
-                              on_click=lambda: ui.navigate.to("/admin/cases")) \
-                        .props("flat").classes("text-blue-700")
-                    ui.button("Users", icon="admin_panel_settings",
-                              on_click=lambda: ui.navigate.to("/admin/users")) \
-                        .props("flat").classes("text-blue-700")
-                ui.button(icon="logout", on_click=lambda: ui.navigate.to("/logout")) \
-                    .props("flat round").classes("text-gray-600").tooltip("Log out")
+                async def print_map():
+                    await ui.run_javascript(PRINT_JS % map_widget.id, timeout=15)
 
-            map_widget = ui.leaflet(center=MAP_CENTER, zoom=9).classes("w-full flex-1 print-target")
-            map_widget.on("init", lambda _: refresh_markers(map_widget, count_label))
+                ui.button("Print map", icon="print", on_click=print_map) \
+                    .props("outline dense").classes("w-full text-blue-700")
 
-            # Leaflet caches the map's pixel size at load time and has no idea our
-            # print CSS just resized its container to fill the page — without this,
-            # it only renders tiles for the original on-screen size, leaving the
-            # rest of the printed page blank. `beforeprint`/`afterprint` are native
-            # browser events that fire right as the print layout kicks in/out, so
-            # we nudge Leaflet to recompute its size at exactly those moments.
-            ui.run_javascript(f"""
-                window.addEventListener('beforeprint', () => {{
-                    const el = getElement({map_widget.id});
-                    if (el && el.map) el.map.invalidateSize();
-                }});
-                window.addEventListener('afterprint', () => {{
-                    const el = getElement({map_widget.id});
-                    if (el && el.map) el.map.invalidateSize();
-                }});
-            """)
+            centre, zoom = pilot_view()
+            map_widget = ui.leaflet(center=centre, zoom=zoom).classes("h-full flex-1 print-map")
+
+    def selected() -> list[dict]:
+        chosen = []
+        for case in cases:
+            level = severity(case)
+            if filters["dka_only"] and level not in SEVERITY_ORDER:
+                continue
+            if level in SEVERITY_ORDER and level not in filters["severities"]:
+                continue
+            if case["sex"] not in filters["sexes"]:
+                continue
+            if not filters["year_min"] <= case["year_of_onset"] <= filters["year_max"]:
+                continue
+            if not filters["age_min"] <= case["age_at_onset"] <= filters["age_max"]:
+                continue
+            chosen.append(case)
+        return chosen
+
+    def area_label(plz5: str) -> str:
+        district = kreis_name(plz5_kreis(plz5)) or "—"
+        score = mean_score(plz5, filters["year_min"], filters["year_max"])
+        tertile = tertile_for(plz5, filters["year_min"], filters["year_max"])
+        text = f"{plz5_label(plz5)} · {district}"
+        if score is not None:
+            band = {1: "lower", 2: "middle", 3: "higher"}.get(tertile, "—")
+            text += f" · GISD {score:.3f} ({band})"
+        if plz5 in plz5_outside_region():
+            text += " · centroid falls outside the district polygons"
+        return text
+
+    def clear(collection: list):
+        for layer in collection:
+            layer.run_method("remove")
+        collection.clear()
+
+    def refresh():
+        chosen = selected()
+        mappable = [
+            case for case in chosen
+            if case.get("plz5") and case["plz5"] in centroids
+        ]
+        unplaced = len(chosen) - len(mappable)
+        areas = len({case["plz5"] for case in mappable})
+        count_label.set_text(
+            f"{len(chosen)} of {len(cases)} cases · {areas} postcode areas"
+            + (f" · {unplaced} without a mappable postcode" if unplaced else "")
+        )
+
+        # The paper copy has no sidebar, so it has to carry its own filter state
+        # or a reader cannot tell what subset they are looking at.
+        severities = (
+            "all severities" if filters["severities"] == set(SEVERITY_ORDER)
+            else ", ".join(sorted(filters["severities"])) or "none"
+        )
+        sexes = "both sexes" if len(filters["sexes"]) == 2 else (
+            ", ".join(sorted(filters["sexes"])) or "no sex selected"
+        )
+        print_caption.set_text(
+            f"{len(mappable)} cases plotted of {len(cases)} confirmed first "
+            f"manifestations · {areas} postcode areas · "
+            f"{filters['year_min']}–{filters['year_max']} · ages "
+            f"{filters['age_min']}–{filters['age_max']} · {sexes} · {severities}"
+            + (", ketoacidosis only" if filters["dka_only"] else ", including non-DKA")
+            + (f" · {unplaced} not mappable" if unplaced else "")
+        )
+
+        clear(circles)
+        if len(mappable) > MAX_PINS:
+            too_many.set_text(
+                f"{len(mappable)} pins is too many to draw legibly. "
+                "Narrow the period, age range or severity."
+            )
+            too_many.set_visibility(True)
+            return
+        too_many.set_visibility(False)
+
+        placed_per_area: dict[str, int] = {}
+        for case in mappable:
+            plz5 = case["plz5"]
+            index = placed_per_area.get(plz5, 0)
+            placed_per_area[plz5] = index + 1
+            latitude, longitude = spiral_offset(
+                *centroids[plz5], index, plz5_jitter_radius(plz5)
+            )
+
+            pin = map_widget.marker(latlng=(latitude, longitude))
+            pin.run_method(":setIcon", pin_icon(marker_colour(case)))
+            pin.run_method(
+                "bindPopup", popup_html(case, severity(case), area_label(plz5))
+            )
+            circles.append(pin)
+
+        clear(markers)
+        if overlays["clinics"]:
+            for hospital in clinics_on_map():
+                marker = map_widget.generic_layer(
+                    name="circleMarker",
+                    args=[
+                        {"lat": hospital["lat"], "lng": hospital["lon"]},
+                        {
+                            "radius": 7,
+                            "color": "#0f766e" if hospital["participating"] else "#b91c1c",
+                            "weight": 2,
+                            "fillColor": "#ffffff",
+                            "fillOpacity": 1,
+                        },
+                    ],
+                )
+                marker.run_method(
+                    "bindTooltip",
+                    f"<b>{escape(hospital['name'])}</b><br>{escape(hospital['city'])}<br>"
+                    + ("Participating Ambulanz" if hospital["participating"]
+                       else "<i>Not participating — its cases are not captured</i>"),
+                )
+                markers.append(marker)
+
+        if overlays["practices"]:
+            for practice in paediatric_practices():
+                marker = map_widget.generic_layer(
+                    name="circleMarker",
+                    args=[
+                        {"lat": practice["lat"], "lng": practice["lon"]},
+                        {
+                            "radius": 3,
+                            "color": "#64748b",
+                            "weight": 1,
+                            "fillColor": "#94a3b8",
+                            "fillOpacity": 0.8,
+                        },
+                    ],
+                )
+                marker.run_method(
+                    "bindTooltip",
+                    f"{escape(practice['name'])}<br>"
+                    f"{escape(practice['postcode'])} {escape(practice['city'])}",
+                )
+                markers.append(marker)
+
+    def draw():
+        for feature in pilot_boundaries()["features"]:
+            ags = str(feature["properties"]["AGS"]).zfill(5)
+            map_widget.generic_layer(
+                name="geoJSON",
+                args=[feature, {"style": {
+                    "color": "#64748b",
+                    "weight": 1.4,
+                    "fillColor": "#f8fafc",
+                    "fillOpacity": 0.35,
+                    "dashArray": "4" if ags in KREISE_WITHOUT_CLINIC else None,
+                }}],
+            )
+        refresh()
+
+    map_widget.on("init", lambda _: draw())

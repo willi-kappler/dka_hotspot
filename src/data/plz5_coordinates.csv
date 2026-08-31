@@ -1,0 +1,75 @@
+zip_code,latitude,longitude,resolved_name,in_pilot_region
+72070,48.521040,9.005655,"Unterjesingen, 72070 Tübingen, Germany",yes
+72072,48.491266,9.043807,"Derendingen, 72072 Tübingen, Germany",yes
+72074,48.560203,9.082957,"Lustnau, 72074 Tübingen, Germany",yes
+72076,48.545762,9.043010,"72076 Tübingen, Germany",yes
+72108,48.473443,8.906948,"72108 Rottenburg, Germany",yes
+72116,48.395471,9.073981,"72116 Mössingen, Germany",yes
+72119,48.556798,8.956866,"72119 Entringen, Germany",yes
+72124,48.565662,9.173790,"72124 Pliezhausen, Germany",yes
+72131,48.422441,9.019395,"72131 Ofterdingen, Germany",yes
+72135,48.598072,9.104147,"72135 Dettenhausen, Germany",yes
+72138,48.542552,9.146090,"72138 Kirchentellinsfurt, Germany",yes
+72141,48.590921,9.165903,"72141 Walddorf, Germany",yes
+72144,48.454100,9.047903,"72144 Dußlingen, Germany",yes
+72145,48.409765,8.900043,"72145 Hirrlingen, Germany",yes
+72147,48.432110,9.074392,"72147 Nehren, Germany",yes
+72149,48.483394,8.865430,"72149 Neustetten, Germany",yes
+72181,48.430693,8.815726,"72181 Starzach, Germany",yes
+72336,48.265902,8.862378,"72336 Balingen, Germany",yes
+72351,48.297175,8.781341,"Erlaheim, 72351 Geislingen, Germany",yes
+72355,48.198711,8.755586,"72355 Schömberg (Stadt), Germany",yes
+72356,48.241870,8.747951,"72356 Dautmergen, Germany",yes
+72358,48.243397,8.774240,"72358 Dormettingen, Germany",yes
+72359,48.223574,8.797335,"72359 Dotternhausen, Germany",yes
+72361,48.203754,8.835881,"72361 Hausen am Tann, Germany",yes
+72362,48.125220,8.906538,"72362 Nusplingen, Germany",yes
+72364,48.163421,8.853520,"72364 Obernheim, Germany",yes
+72365,48.191198,8.808031,"72365 Ratshausen, Germany",yes
+72367,48.188339,8.774273,"72367 Weilen unter den Rinnen, Germany",yes
+72369,48.220871,8.721668,"72369 Zimmern unter der Burg, Germany",yes
+72379,48.352157,8.976451,"72379 Hechingen, Germany",yes
+72393,48.314310,9.118489,"Ringingen, 72393 Burladingen, Germany",yes
+72406,48.309407,8.930738,"72406 Bisingen, Germany",yes
+72411,48.398423,8.970620,"72411 Bodelshausen, Germany",yes
+72414,48.386809,8.876170,"72414 Rangendingen, Germany",yes
+72415,48.340264,8.879299,"72415 Grosselfingen, Germany",yes
+72417,48.327101,9.040492,"72417 Jungingen, Germany",yes
+72458,48.201562,9.027744,"Ebingen, 72458 Albstadt, Germany",yes
+72459,48.227021,8.948142,"72459 Margrethausen, Germany",yes
+72461,48.266814,9.014670,"Tailfingen, 72461 Albstadt, Germany",yes
+72469,48.170037,8.931912,"Unterdigisheim, 72469 Meßstetten, Germany",yes
+72474,48.188970,9.138818,"72474 Benzingen, Germany",yes
+72475,48.238886,9.092762,"72475 Bitz, Germany",yes
+72477,48.111121,8.989132,"72477 Schwenningen, Germany",no
+72479,48.178448,9.080703,"72479 Straßberg, Germany",yes
+72525,48.404374,9.524162,"Auingen, 72525 Münsingen, Germany",yes
+72531,48.340284,9.359999,"72531 Oberstetten, Germany",yes
+72532,48.387483,9.400506,"72532 Gomadingen, Germany",yes
+72534,48.295137,9.471425,"Indelhausen, 72534 Hayingen, Germany",yes
+72537,48.374829,9.562178,"72537 Mehrstetten, Germany",yes
+72539,48.268409,9.383935,"72539 Aichstetten, Germany",yes
+72555,48.528271,9.289421,"Neuhausen an der Erms, 72555 Metzingen, Germany",yes
+72574,48.482626,9.423645,"72574 Bad Urach, Germany",yes
+72581,48.526628,9.353912,"72581 Dettingen an der Erms, Germany",yes
+72582,48.525550,9.454582,"72582 Grabenstetten, Germany",yes
+72584,48.521805,9.405728,"72584 Hülben, Germany",yes
+72585,48.558917,9.264324,"72585 Riederich, Germany",yes
+72587,48.500230,9.537323,"72587 Böhringen, Germany",yes
+72661,48.569032,9.306111,"72661 Grafenberg, Germany",yes
+72760,48.511413,9.203852,"Reutlingen (Kernstadt), 72760 Reutlingen, Germany",yes
+72762,48.479721,9.192656,"Reutlingen (Kernstadt), 72762 Reutlingen, Germany",yes
+72764,48.488118,9.217290,"Reutlingen (Kernstadt), 72764 Reutlingen, Germany",yes
+72766,48.530293,9.233815,"Sondelfingen, 72766 Reutlingen, Germany",yes
+72768,48.536108,9.193711,"Rommelsbach, 72768 Reutlingen, Germany",yes
+72770,48.460756,9.155498,"Reutlingen (Kernstadt), 72770 Reutlingen, Germany",yes
+72793,48.452282,9.220908,"72793 Pfullingen, Germany",yes
+72800,48.484021,9.274614,"72800 Eningen unter Achalm, Germany",yes
+72805,48.423107,9.268956,"72805 Holzelfingen, Germany",yes
+72810,48.457067,9.101617,"72810 Gomaringen, Germany",yes
+72813,48.452739,9.353241,"Würtingen, 72813 St. Johann, Germany",yes
+72818,48.305690,9.263421,"72818 Trochtelfingen, Germany",yes
+72820,48.382401,9.192321,"72820 Undingen, Germany",yes
+72827,48.513486,9.152156,"72827 Wannweil, Germany",yes
+72829,48.385529,9.297830,"Kleinengstingen, 72829 Engstingen, Germany",yes
+88529,48.227464,9.443493,"88529 Zwiefalten, Germany",yes

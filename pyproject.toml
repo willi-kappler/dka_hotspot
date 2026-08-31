@@ -1,0 +1,82 @@
+[project]
+name = "dka-hotspot-pilot"
+version = "0.1.0"
+description = "DKA at type 1 diabetes manifestation — Tübingen/Reutlingen/Zollernalb pilot"
+requires-python = ">=3.11"
+
+# Floors state what the code needs; uv.lock pins what it actually ran on.
+dependencies = [
+    "nicegui>=3.7",
+    "bcrypt>=3.2",
+    "numpy>=1.26",
+    "pandas>=2.0",
+    "scipy>=1.11",
+    # GLM fitting with cluster-robust covariance, which the deprivation
+    # coefficient needs; see services/models.py.
+    "statsmodels>=0.14",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+]
+
+[tool.uv]
+# src/ is an import root, not an installable package; without this uv would
+# try to build and install the project itself.
+package = false
+
+[tool.pytest.ini_options]
+# The application imports as though ``src`` were the root ("from services.x
+# import y"), which is what the scripts set up by hand with sys.path. This
+# gives the test suite the same import root without each test repeating it.
+pythonpath = ["src", "scripts"]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "slow: fits a regression model or reads a large data file",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# Default rules (pyflakes + a subset of pycodestyle) plus import sorting and
+# bugbear. Kept deliberately close to the default: the codebase was already
+# clean under it, so the linter reports real problems rather than style noise.
+select = ["E4", "E7", "E9", "F", "I", "B"]
+ignore = [
+    # zip() without strict=. Worth adopting, but strict=True turns a silent
+    # length mismatch into a raise, which is a runtime behaviour change. It is
+    # deliberately deferred until the suite covers the call sites involved
+    # (services/geography.py, services/markers.py, services/epidemiology.py).
+    "B905",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Scripts run as ``python3 scripts/x.py`` and must extend sys.path before they
+# can import from src/, so their imports legitimately follow executable code.
+"scripts/*.py" = ["E402"]
+# Page modules are imported purely for the route-registration side effect.
+"src/main.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["services", "storage", "pages", "db", "auth", "env", "rate_limit"]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    # NiceGUI page bodies only execute inside a browser session. They are
+    # covered by the import smoke test, not by line coverage.
+    "src/pages/*",
+    "src/main.py",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel an in-flight run when new commits land on the same branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - run: uv sync --frozen --only-dev
+      - name: ruff check
+        run: uv run --frozen ruff check src scripts tests
+      - name: ruff format --check
+        run: uv run --frozen ruff format --check src scripts tests
+        continue-on-error: true  # advisory until the codebase is formatted once
+      - name: requirements exports are in sync with uv.lock
+        # The exports are generated, not authored. They exist so the app can be
+        # installed with plain pip; this fails the build if they drift.
+        run: |
+          uv export --frozen --no-dev --no-hashes -o requirements.txt
+          uv export --frozen --no-hashes -o requirements-dev.txt
+          git diff --exit-code -- requirements.txt requirements-dev.txt
+
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 is the floor declared in pyproject; 3.13 is what development
+        # runs on. Testing both catches accidental use of newer syntax.
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+      - name: Install locked dependencies
+        # --frozen fails if uv.lock is out of date with pyproject.toml, so a
+        # dependency added without relocking cannot pass CI.
+        run: uv sync --frozen --python ${{ matrix.python-version }}
+      - name: Run tests
+        # The gate covers services, storage and auth. Page modules are excluded
+        # in pyproject (NiceGUI bodies only run in a browser session) and are
+        # covered instead by the import smoke test.
+        run: |
+          uv run --frozen python -m pytest tests \
+            --cov --cov-report=term-missing \
+            --cov-fail-under=85 \
+            --junitxml=junit-${{ matrix.python-version }}.xml
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: junit-${{ matrix.python-version }}
+          path: junit-${{ matrix.python-version }}.xml
+          if-no-files-found: ignore
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Fail if a secret or patient file was committed
+        run: |
+          set -e
+          echo "Checking tracked files..."
+          if git ls-files | grep -E '(^|/)\.env$|\.db$|\.nicegui/|^backups/'; then
+            echo "::error::A secret, database or session-storage file is tracked."
+            exit 1
+          fi
+          echo "Checking src/data allowlist..."
+          # src/data is deny-by-default in .gitignore. Anything tracked there
+          # must be one of the derived files the application reads.
+          allowed="GISD_PLZ5_Baden-Wuerttemberg.tsv landkreise_baden_wuerttemberg.geojson kvbw_pediatricians.csv bw_childrens_hospitals_2026-07-28.csv plz5_reference_pilot_region.csv plz5_coordinates.csv dka_synthetic_patients_plz5.csv"
+          for f in $(git ls-files src/data | xargs -n1 basename); do
+            case " $allowed " in
+              *" $f "*) ;;
+              *) echo "::error::Unexpected file tracked in src/data: $f"; exit 1 ;;
+            esac
+          done
+          echo "OK"
