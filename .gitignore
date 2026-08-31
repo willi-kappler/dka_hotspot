@@ -17,7 +17,8 @@ venv/
 .nicegui/
 
 # Local Claude Code settings (launch.json is shared, settings.local.json is not)
-.claude/settings.local.json
+.claude/
+.vscode/
 
 # --- src/data ---------------------------------------------------------------
 # Deny by default, then allow back the files the application actually opens.

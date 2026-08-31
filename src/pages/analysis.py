@@ -168,9 +168,9 @@ def analysis_page():
                         "text-xl font-bold tracking-tight text-slate-900"
                     )
                     ui.label(
-                        "Associations among observed first manifestations. Clinic "
-                        "participation and selective capture can limit how far they "
-                        "generalise beyond these records."
+                        "These analyses include confirmed first manifestations "
+                        "recorded by participating clinics and may not represent "
+                        "all cases in the region."
                     ).classes("text-sm text-slate-500")
 
                 with ui.grid(columns=2).classes("w-full gap-4"):
@@ -184,8 +184,8 @@ def analysis_page():
 
                     deprivation = summaries.by_deprivation(cases)
                     with _card(
-                        "Severe DKA by deprivation",
-                        "Tertiles cut within the pilot region, not nationally",
+                        "Severe DKA by GISD deprivation tertile",
+                        "GISD tertiles calculated within Baden-Württemberg, not nationally",
                     ):
                         if deprivation:
                             ui.echart(
@@ -302,7 +302,7 @@ def analysis_page():
                 ):
                     ui.echart(charts.district_shares(districts)).classes("w-full h-72")
                 with _card(
-                    "Lockdown period",
+                    "Pandemic period (2020–2021)",
                     "Fixed calendar windows, so the comparison is stable across filters",
                 ):
                     ui.echart(charts.period_windows(pandemic)).classes("w-full h-72")
@@ -314,8 +314,7 @@ def analysis_page():
                             f"({ratio['ci_low']:.2f}–{ratio['ci_high']:.2f})"
                         ).classes("text-sm font-medium text-slate-900")
                     ui.label(
-                        "This contrast cannot separate the pandemic from the "
-                        "underlying trend: a steady rise across 2014–2025 would "
-                        "land here as a lockdown effect. Read it against the "
-                        "annual trend above, not on its own."
+                        "Any difference in 2020–2021 may reflect the longer-term "
+                        "trend rather than the pandemic itself. Compare this "
+                        "result with the annual trend above."
                     ).classes("text-xs text-slate-500 leading-relaxed")

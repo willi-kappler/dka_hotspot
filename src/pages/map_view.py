@@ -307,13 +307,11 @@ def map_page():
                         )
                         ui.label(label).classes("text-xs text-slate-600")
                 ui.label(
-                    "Darker means lower pH, so a deeper pin is a child who "
-                    "arrived more acidotic."
+                    "Darker pins indicate lower pH."
                 ).classes(CAPTION)
 
                 ui.label(
-                    "Each pin is one case, scattered around its postcode "
-                    "centroid — a drawn position, never an address."
+                    "Each pin is one case, scattered around its postcode centroid."
                 ).classes(CAPTION)
 
                 ui.separator()

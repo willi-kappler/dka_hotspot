@@ -80,9 +80,6 @@ def admin_users_page():
                 with ui.card().classes("w-full p-0 gap-0"):
                     with ui.row().classes("w-full items-center border-b border-gray-200 px-4 py-3"):
                         ui.label("Existing users").classes("text-base font-semibold")
-                        ui.space()
-                        ui.label("Passwords are never displayed. Use reset to set a new temporary password.") \
-                            .classes("text-xs text-gray-500")
 
                     for user in list_users():
                         is_current_user = user["username"] == app.storage.user.get("username")
@@ -200,8 +197,3 @@ def admin_users_page():
                         row_key="id",
                         pagination={"rowsPerPage": 15},
                     ).props("flat dense").classes("w-full")
-                ui.label(
-                    "Append-only: nothing in the application edits or deletes "
-                    "these rows. Passwords and patient identifiers are never "
-                    "recorded here."
-                ).classes("px-4 py-2 text-xs text-gray-500")

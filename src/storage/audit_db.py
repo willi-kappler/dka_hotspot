@@ -1,7 +1,8 @@
 """Append-only audit trail."""
 
 import logging
-from datetime import datetime, timezone
+import threading
+from datetime import date, datetime, timedelta, timezone
 
 from db import get_connection, init_db
 
@@ -22,6 +23,45 @@ CASES_REPLACED = "data.cases_replaced"
 ONSETS_IMPORTED = "data.onsets_imported"
 
 SYSTEM_ACTOR = "system"
+
+RETENTION_DAYS = 90
+
+_compaction_lock = threading.Lock()
+_last_compaction_date: date | None = None
+
+
+def compact_old_entries(now: datetime | None = None) -> int:
+    """Replace detailed entries older than the retention period with daily counts."""
+    current = now or datetime.now(timezone.utc)
+    cutoff = (current - timedelta(days=RETENTION_DAYS)).isoformat(timespec="seconds")
+    init_db()
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO audit_summary (day, action, event_count)
+            SELECT substr(at, 1, 10), action, COUNT(*)
+            FROM audit_log
+            WHERE at < ?
+            GROUP BY substr(at, 1, 10), action
+            ON CONFLICT (day, action) DO UPDATE SET
+                event_count = audit_summary.event_count + excluded.event_count
+            """,
+            (cutoff,),
+        )
+        deleted = conn.execute("DELETE FROM audit_log WHERE at < ?", (cutoff,))
+        return deleted.rowcount
+
+
+def _compact_if_due(now: datetime | None = None) -> None:
+    """Run compaction no more than once per UTC calendar day."""
+    global _last_compaction_date
+    current = now or datetime.now(timezone.utc)
+    today = current.date()
+    with _compaction_lock:
+        if _last_compaction_date == today:
+            return
+        compact_old_entries(current)
+        _last_compaction_date = today
 
 
 def record(action: str, actor: str | None = None, target: str = "", detail: str = "") -> None:
@@ -44,6 +84,12 @@ def record(action: str, actor: str | None = None, target: str = "", detail: str 
             )
     except Exception:
         logger.exception("Could not write audit entry %r", action)
+        return
+
+    try:
+        _compact_if_due()
+    except Exception:
+        logger.exception("Could not compact old audit entries")
 
 
 def recent(limit: int = 200, action: str | None = None) -> list[dict]:

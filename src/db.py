@@ -127,6 +127,18 @@ def _create_audit_log(conn: sqlite3.Connection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log (action)")
 
 
+def _create_audit_summary(conn: sqlite3.Connection) -> None:
+    """Create daily counts for audit events beyond the detailed retention period."""
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS audit_summary (
+            day TEXT NOT NULL,
+            action TEXT NOT NULL,
+            event_count INTEGER NOT NULL CHECK (event_count >= 0),
+            PRIMARY KEY (day, action)
+        )
+    """)
+
+
 def init_db() -> None:
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)
     with get_connection() as conn:
@@ -135,3 +147,4 @@ def init_db() -> None:
         _create_cases(conn)
         _create_onsets(conn)
         _create_audit_log(conn)
+        _create_audit_summary(conn)
