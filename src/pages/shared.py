@@ -34,6 +34,11 @@ def header(title: str, subtitle: str = ""):
         ui.space()
         ui.button("Overview", icon="map", on_click=lambda: ui.navigate.to("/overview")) \
             .props("flat dense").classes("text-blue-700")
+        if role == "user":
+            ui.button("Analysis", icon="query_stats",
+                    on_click=lambda: ui.navigate.to("/analysis")) \
+                .props("flat dense").classes("text-blue-700")
+
         if role in RESEARCH_ROLES:
             ui.button("Case map", icon="scatter_plot",
                       on_click=lambda: ui.navigate.to("/map")) \

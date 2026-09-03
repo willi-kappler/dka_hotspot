@@ -13,7 +13,7 @@ SEVERITY_ORDER = ("Severe", "Moderate", "Mild")
 NO_DKA = "No DKA"
 UNKNOWN = "Unknown"
 
-Z_95 = 1.959963984540054
+Z_95 = 1.959963984540054  #stats constant for 95% confidence intervals
 
 
 def severity(case: dict) -> str:
@@ -127,7 +127,7 @@ def proportion_with_ci(successes: int, total: int) -> dict:
     }
 
 
-def risk_ratio_with_ci(
+def risk_ratio_with_ci(  #pandemic period vs pre-pandemic period
     successes_a: int, total_a: int,
     successes_b: int, total_b: int,
 ) -> dict:

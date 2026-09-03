@@ -31,7 +31,7 @@ KREIS_NAME_TO_AGS = {
 METRES_PER_LATITUDE_DEGREE = 111_320
 
 
-@lru_cache(maxsize=1)
+@lru_cache(maxsize=1)  #cache to avoid repeated file reads
 def pilot_boundaries() -> dict:
     """GeoJSON FeatureCollection holding only the three pilot districts."""
     data = json.loads(BOUNDARIES_FILE.read_text(encoding="utf-8"))

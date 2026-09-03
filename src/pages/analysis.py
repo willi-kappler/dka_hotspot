@@ -1,4 +1,4 @@
-"""Analysis dashboard for scientists."""
+"""Analysis dashboard for all"""
 
 from nicegui import ui
 
@@ -78,7 +78,7 @@ def _model_block(title: str, subtitle: str, model: dict):
 
 @ui.page("/analysis")
 def analysis_page():
-    if not require("scientist", "admin"):
+    if not require("scientist", "admin", "user"):
         return
 
     loaded_cases = load_cases()
