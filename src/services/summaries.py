@@ -2,7 +2,7 @@
 
 from collections import Counter, defaultdict
 
-from services.deprivation import tertile_for
+from services.deprivation import tertile_for, tertile_ranges
 from services.epidemiology import (
     SEVERITY_ORDER,
     cochran_armitage_trend,
@@ -18,6 +18,17 @@ from services.geography import KREISE_WITHOUT_CLINIC, kreis_name
 
 AGE_BANDS = (("0–4", 0, 4), ("5–9", 5, 9), ("10–14", 10, 14), ("15–19", 15, 19))
 TERTILE_LABELS = {1: "Lower", 2: "Middle", 3: "Higher"}
+
+
+def filter_cases(cases: list[dict], districts: set[str] | None = None,
+                 year_min: int | None = None, year_max: int | None = None) -> list[dict]:
+    """Keep cases in the given districts and onset-year range; None means no limit."""
+    return [
+        case for case in cases
+        if (districts is None or case.get("kreis_ags") in districts)
+        and (year_min is None or case["year_of_onset"] >= year_min)
+        and (year_max is None or case["year_of_onset"] <= year_max)
+    ]
 
 
 def _years(cases: list[dict]) -> tuple[int, int]:
@@ -72,8 +83,10 @@ def by_deprivation(cases: list[dict]) -> list[dict]:
         tertile = tertile_for(case.get("plz5") or "", year_min, year_max)
         if tertile:
             groups[tertile].append(case)
+    ranges = tertile_ranges(year_min, year_max)
     return [
-        _breakdown(TERTILE_LABELS[tertile], groups[tertile], tertile=tertile)
+        _breakdown(TERTILE_LABELS[tertile], groups[tertile], tertile=tertile,
+                   range=ranges[tertile])
         for tertile in (1, 2, 3) if groups.get(tertile)
     ]
 

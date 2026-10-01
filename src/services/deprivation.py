@@ -89,6 +89,19 @@ def tertile_for(plz5: str, year_min: int, year_max: int) -> int | None:
     return 2 if mean < second else 3
 
 
+def tertile_ranges(year_min: int, year_max: int) -> dict[int, tuple[float, float]]:
+    """Lowest and highest postcode score in each tertile."""
+    ranges: dict[int, tuple[float, float]] = {}
+    for plz5 in pilot_plz5():
+        tertile = tertile_for(plz5, year_min, year_max)
+        if tertile is None:
+            continue
+        score = mean_score(plz5, year_min, year_max)
+        low, high = ranges.get(tertile, (score, score))
+        ranges[tertile] = (min(low, score), max(high, score))
+    return ranges
+
+
 def coverage() -> dict:
     """Return GISD coverage for pilot postcodes."""
     areas = pilot_plz5()

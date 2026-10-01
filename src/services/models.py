@@ -1,11 +1,15 @@
 """Case-level regression models."""
 
+import logging
+
 import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
 from services.deprivation import attach_to_cases
 from services.epidemiology import eligible_manifestations, is_gradeable, is_severe
+
+logger = logging.getLogger(__name__)
 
 # Minimum events per fitted parameter.
 MIN_EVENTS_PER_PARAMETER = 10
@@ -56,14 +60,19 @@ def _fit(frame: pd.DataFrame, outcome: str, terms: list[str], family) -> dict:
             cov_type="cluster",
             cov_kwds={"groups": frame["plz5"].fillna("unknown")},
         )
-    except Exception as error:  # singular design, separation, non-convergence
-        return {"available": False, "reason": f"Model did not fit: {error}"}
+    except Exception:  # singular design, separation, non-convergence
+        logger.exception("GLM fit failed for outcome %r", outcome)
+        return {
+            "available": False,
+            "reason": "The model could not be calculated for this selection. "
+                      "Try widening the filters.",
+        }
 
     if not np.all(np.isfinite(result.bse)):
         return {
             "available": False,
-            "reason": "Standard errors are not estimable — the cohort is too "
-                      "sparse or a predictor separates the outcome.",
+            "reason": "The data in this selection is too sparse for reliable "
+                      "results. Try widening the filters.",
         }
 
     estimates = []
@@ -103,11 +112,8 @@ def severity_model(cases: list[dict]) -> dict:
     if events < MIN_EVENTS_PER_PARAMETER * (len(terms) + 1):
         return {
             "available": False,
-            "reason": (
-                f"{events} severe cases support about {events // MIN_EVENTS_PER_PARAMETER} "
-                f"parameters; this model needs {len(terms) + 1}. Reduce the "
-                "covariates or wait for more data."
-            ),
+            "reason": "Too few severe cases for this model. Widen the filters "
+                      "to include more cases.",
         }
 
     model = _fit(frame, "severe", terms, sm.families.Poisson())
@@ -143,8 +149,8 @@ def duration_model(cases: list[dict]) -> dict:
     if frame.shape[0] < 30:
         return {
             "available": False,
-            "reason": f"Only {frame.shape[0]} cases record symptom duration; "
-                      "at least 30 are needed.",
+            "reason": "Too few cases with symptom duration. Widen the filters "
+                      "to include more cases.",
         }
 
     terms = _terms(frame)

@@ -178,7 +178,11 @@ def severity_donut(rows: list[dict]) -> dict:
 
 def _grouped_share(rows: list[dict], key: str, name: str, colour_map=None) -> dict:
     """Build grouped proportions with confidence intervals."""
-    labels = [f"{row['label']} (n={row['cases']})" for row in rows]
+    labels = [
+        f"{row['label']} (n={row['cases']})"
+        + (f"\nGISD {row['range'][0]:.2f}–{row['range'][1]:.2f}" if row.get("range") else "")
+        for row in rows
+    ]
 
     def pct(row, bound):
         return round((row[key][bound] or 0) * 100, 1)
