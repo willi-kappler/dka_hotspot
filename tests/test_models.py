@@ -124,7 +124,7 @@ def test_duration_model_fits_and_estimates_its_dispersion():
 def test_duration_model_declines_below_thirty_records():
     model = duration_model(cohort(n=20))
     assert model["available"] is False
-    assert "30" in model["reason"]
+    assert "Too few cases with symptom duration" in model["reason"]
 
 
 def test_duration_model_declines_when_no_case_records_a_duration():

@@ -9,6 +9,7 @@ from services.summaries import (
     by_sex,
     by_year,
     duration_by_deprivation,
+    filter_cases,
     overall,
     pandemic_comparison,
     severity_mix,
@@ -154,3 +155,31 @@ def test_an_empty_cohort_returns_empty_breakdowns_rather_than_raising():
     assert by_deprivation([]) == []
     assert severity_mix([]) == []
     assert overall([])["proportion"] is None
+
+
+def test_filter_cases_by_district_and_year_range():
+    cases = [
+        case(kreis_ags="08416", year_of_onset=2018),
+        case(kreis_ags="08415", year_of_onset=2020),
+        case(kreis_ags="08416", year_of_onset=2023),
+    ]
+    assert filter_cases(cases, {"08416"}, 2015, 2020) == [cases[0]]
+    assert filter_cases(cases, year_min=2020) == cases[1:]
+    assert filter_cases(cases, set()) == []
+
+
+def test_filter_cases_without_limits_keeps_everything():
+    cases = [case(), case(kreis_ags="08417")]
+    assert filter_cases(cases) == cases
+
+
+def test_by_deprivation_carries_the_score_range_of_each_tertile():
+    rows = by_deprivation([
+        case(plz5=postcode, kreis_ags=None, **DKA)
+        for postcode in ("72070", "72760", "72336", "72379", "72072", "72074")
+    ])
+    for row in rows:
+        low, high = row["range"]
+        assert low <= high
+    ordered = [row["range"] for row in rows]
+    assert all(a[1] < b[0] for a, b in zip(ordered, ordered[1:]))
