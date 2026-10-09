@@ -28,3 +28,19 @@ geographic context.
   on 13 August 2026.
 - **Hospitals** — extracted from the
   [Bundes-Klinik-Atlas Open Data](https://bundes-klinik-atlas.de/open-data/).
+
+## Installation
+
+If you're using NixOS you can just type "nix-shell shell.nix"
+Use uv to create and update an environment: "uv sync"
+Avtivate the environment: "source .venv/bin/activate"
+
+## Start the web app
+Run the main Python file: "uv run src/main.py"
+
+## Developer requirements
+
+
+## Running the tests
+
+
