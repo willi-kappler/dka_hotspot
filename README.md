@@ -42,5 +42,5 @@ Run the main Python file: "uv run src/main.py"
 
 
 ## Running the tests
-
+To run all the tests use: "uv run pytest"
 
